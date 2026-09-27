@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 # Required FastAPI Imports for APIs, UI Rendering, and Background Tasks
-from fastapi import FastAPI, Depends, HTTPException, status, Request, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, Request, BackgroundTasks, File, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -123,6 +123,20 @@ def upsert_employer(emp_data: EmployerSchema, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(employer)
     return employer
+
+import time
+
+@app.post("/api/extract")
+async def extract_salary_slip(file: UploadFile = File(...)):
+    """PDF file receive karta hai aur extraction logic call karta hai"""
+    # Yahan hum baad me tumhara core/parser.py connect karenge
+    # Abhi ke liye hum artificial delay de rahe hain UI flow check karne ke liye
+    time.sleep(1.5) 
+    
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        
+    return {"message": "Extracted successfully", "filename": file.filename}
 
 @app.post("/api/ledger/save", status_code=status.HTTP_201_CREATED)
 def save_monthly_ledger(ledger_data: LedgerSchema, db: Session = Depends(get_db)):
