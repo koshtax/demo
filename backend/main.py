@@ -129,25 +129,37 @@ import time
 # Upar imports me ye line add karo (apne actual parser function ke hisab se naam change kar lena)
 from core.parser import extract_salary_data 
 
+import os
+import tempfile
+from fastapi import File, UploadFile
+# Tumhare core engine se parser import kar rahe hain
+from core.parser import parse_salary_slip # Agar function ka naam alag hai, toh ise adjust kar lena
+
 @app.post("/api/extract")
 async def extract_salary_slip(file: UploadFile = File(...)):
+    """Real PDF file receive karta hai aur core/parser.py ko bhejta hai"""
     if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Sirf PDF files allowed hain")
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+
+    # File ko temporarily disk par save karna (kyunki OCR engines mostly file path mangte hain)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
 
     try:
-        # File ko memory me read karo
-        file_bytes = await file.read()
+        # Tumhara actual parser call ho raha hai
+        # (Ye parser.py se data nikalega aur usme matrix correction apply karega)
+        extracted_data = parse_salary_slip(tmp_path)
         
-        # Yahan tumhara real AI/OCR engine file ko process karega
-        extracted_data = extract_salary_data(file_bytes)
+        # Abhi ke liye hum success bhej rahe hain taki frontend /review par chala jaye
+        return {"message": "Extracted successfully", "data": extracted_data}
         
-        # TODO: extracted_data aane ke baad DB me save karne ka logic yahan call hoga 
-        # (Jaise humne LedgerSchema wala route banaya tha)
-
-        return {"message": "PDF successfully processed", "data": extracted_data}
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Parsing error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Parsing Error: {str(e)}")
+    finally:
+        # Processing ke baad temporary file delete kar do (storage bachane ke liye)
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 @app.post("/api/ledger/save", status_code=status.HTTP_201_CREATED)
 def save_monthly_ledger(ledger_data: LedgerSchema, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == ledger_data.user_id).first()
