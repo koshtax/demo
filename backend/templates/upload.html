@@ -58,9 +58,62 @@
 </div>
 
 <script>
-    // Simple click-to-upload script
-    document.getElementById('dropzone').addEventListener('click', () => {
-        document.getElementById('file-upload').click();
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file-upload');
+    const extractBtn = document.getElementById('extract_btn'); // Button me ye id add karni hogi
+
+    // Click to upload
+    dropzone.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    // File select hone par naam dikhao
+    fileInput.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            const fileName = this.files[0].name;
+            dropzone.querySelector('span.text-lg').innerText = fileName;
+            dropzone.querySelector('span.text-sm').innerText = "File selected. Click 'Extract Data' to proceed.";
+            dropzone.classList.add('border-prashasan-base', 'bg-prashasan-light');
+        }
+    });
+
+    // Extract Data button click logic
+    document.querySelector('button').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        
+        if (fileInput.files.length === 0) {
+            alert("Please select a PDF file first.");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+
+        // Loading state
+        const originalText = btn.innerHTML;
+        btn.innerHTML = 'Extracting Data... ⌛';
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/api/extract', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                // Success hone par sidha Step 2 par bhej do
+                window.location.href = '/review';
+            } else {
+                const error = await response.json();
+                alert("Error: " + error.detail);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        } catch (error) {
+            alert("Server connection failed.");
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
     });
 </script>
 {% endblock %}
