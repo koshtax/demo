@@ -126,18 +126,28 @@ def upsert_employer(emp_data: EmployerSchema, db: Session = Depends(get_db)):
 
 import time
 
+# Upar imports me ye line add karo (apne actual parser function ke hisab se naam change kar lena)
+from core.parser import extract_salary_data 
+
 @app.post("/api/extract")
 async def extract_salary_slip(file: UploadFile = File(...)):
-    """PDF file receive karta hai aur extraction logic call karta hai"""
-    # Yahan hum baad me tumhara core/parser.py connect karenge
-    # Abhi ke liye hum artificial delay de rahe hain UI flow check karne ke liye
-    time.sleep(1.5) 
-    
     if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-        
-    return {"message": "Extracted successfully", "filename": file.filename}
+        raise HTTPException(status_code=400, detail="Sirf PDF files allowed hain")
 
+    try:
+        # File ko memory me read karo
+        file_bytes = await file.read()
+        
+        # Yahan tumhara real AI/OCR engine file ko process karega
+        extracted_data = extract_salary_data(file_bytes)
+        
+        # TODO: extracted_data aane ke baad DB me save karne ka logic yahan call hoga 
+        # (Jaise humne LedgerSchema wala route banaya tha)
+
+        return {"message": "PDF successfully processed", "data": extracted_data}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Parsing error: {str(e)}")
 @app.post("/api/ledger/save", status_code=status.HTTP_201_CREATED)
 def save_monthly_ledger(ledger_data: LedgerSchema, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == ledger_data.user_id).first()
