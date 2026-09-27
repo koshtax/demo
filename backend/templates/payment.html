@@ -50,10 +50,13 @@
             <h3 class="text-2xl font-bold text-slate-800 mb-2">Payment Approved!</h3>
             <p class="text-slate-600 mb-8">Your Form 16 for FY 2025-26 has been successfully generated and a copy has been emailed to you.</p>
             
-            <button class="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-lg font-semibold shadow transition-colors flex items-center gap-3 text-lg">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                Download Form 16 PDF
-            </button>
+    <a id="download_pdf_btn" href="#" class="bg-prashasan-base hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium shadow transition-colors inline-flex items-center gap-2">
+    <!-- Download Icon -->
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+    </svg>
+    Download Form 16 PDF
+</a>
         </div>
 
     </div>
@@ -86,22 +89,38 @@
         }
 
         // Fake user ID for demo (in production, this comes from session/URL)
-        const mockUserId = "test-user-uuid"; 
+        const mockUserId = "{{ user_id }}"; 
 
-        try {
-            // POST request to submit UTR
+// 🟢 NAYA CODE: Browser ki memory se tumhara asali data nikalna 🟢
+        const manualDetails = JSON.parse(sessionStorage.getItem('manualPersonalDetails') || '{}');
+        const extractedSlips = JSON.parse(sessionStorage.getItem('extractedSlips') || '[]');
+
+try {
+            // POST request to submit UTR + Tumhara Personal Data
             const response = await fetch('/api/payment/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user_id: mockUserId,
                     utr_number: utr,
-                    amount: {{ fee_amount }}
+                    amount: "{{ fee_amount }}",
+                    office: manualDetails.office || "",
+                    mobile: manualDetails.mobile || "",
+                    email: manualDetails.email || "",
+                    slips: extractedSlips
                 })
             });
             
+            // 🛑 NAYA CODE: Agar backend fail hua toh alert karo aur ruk jao! 🛑
+            if (!response.ok) {
+                const errData = await response.json();
+                alert("Backend Error: " + errData.detail);
+                return; // Iske aage form Verifying par nahi jayega
+            }
+            
             const data = await response.json();
             currentPaymentId = data.payment_id;
+            // ... (iske neeche purana UI transition code waisa hi rahega)
 
             // UI Transitions
             document.getElementById('payment_section').classList.add('hidden');
@@ -113,6 +132,7 @@
             pollInterval = setInterval(checkStatus, 5000);
 
         } catch (error) {
+            console.error("Payment Submission Error:", error);
             alert("Error submitting UTR. Please try again.");
         }
     });
@@ -134,6 +154,8 @@
                 document.getElementById('success_section').classList.remove('hidden');
                 document.getElementById('success_section').classList.add('flex');
                 
+                // 🟢 NAYI LINE: Button ko backend se link kar diya taaki sahi payment_id ki PDF mile 🟢
+                document.getElementById('download_pdf_btn').href = `/api/download/form16/${currentPaymentId}`;
                 // Optional Stepper update to Full Green
                 const steps = document.querySelectorAll('.rounded-full');
                 steps[3].classList.replace('bg-prashasan-base', 'bg-emerald-500');
@@ -144,4 +166,5 @@
         }
     }
 </script>
+
 {% endblock %}

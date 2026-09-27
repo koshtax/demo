@@ -10,11 +10,56 @@
         </div>
         <div class="text-right">
             <p class="text-sm text-slate-500 uppercase tracking-wide">Employee PAN</p>
-            <p class="font-semibold text-slate-800 font-mono">OSYPK6572D</p>
+            <p class="font-semibold text-slate-800 font-mono" id="emp_pan_header">Loading...</p>
         </div>
     </div>
 
     <div class="p-6">
+        
+        <!-- NEW: Employee Personal Details Section -->
+        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">Employee Personal Details</h3>
+        <div class="bg-slate-50 p-5 rounded-lg border border-slate-200 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                
+                <!-- Auto-filled (Non-editable) -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">Employee Name</label>
+                    <input type="text" id="emp_name" readonly class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm cursor-not-allowed font-medium">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">PAN Number</label>
+                    <input type="text" id="emp_pan_input" readonly class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm font-mono cursor-not-allowed font-medium">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">GPF / PRAN Number</label>
+                    <input type="text" id="emp_gpf" readonly class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm font-mono cursor-not-allowed font-medium">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">Designation</label>
+                    <input type="text" id="emp_desig" readonly class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm cursor-not-allowed font-medium">
+                </div>
+
+                <!-- Divider -->
+                <div class="md:col-span-2">
+                    <hr class="border-slate-200 my-2">
+                </div>
+
+                <!-- Manually Filled (Editable) -->
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">Office / School Name & Address <span class="text-red-500">*</span></label>
+                    <input type="text" id="emp_office" placeholder="e.g., Utkramit +2 High School, Tubil, Arki" class="w-full bg-white border border-slate-300 text-slate-800 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-prashasan-base focus:border-prashasan-base outline-none transition-shadow">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">Mobile Number <span class="text-red-500">*</span></label>
+                    <input type="tel" id="emp_mobile" placeholder="10-digit mobile number" maxlength="10" class="w-full bg-white border border-slate-300 text-slate-800 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-prashasan-base focus:border-prashasan-base outline-none transition-shadow">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">Email ID <span class="text-red-500">*</span></label>
+                    <input type="email" id="emp_email" placeholder="employee@example.com" class="w-full bg-white border border-slate-300 text-slate-800 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-prashasan-base focus:border-prashasan-base outline-none transition-shadow">
+                </div>
+            </div>
+        </div>
+
         <!-- Matrix Correction Side-by-Side UI -->
         <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">Latest Month Check (Anomaly Detected)</h3>
         
@@ -23,14 +68,14 @@
             <div class="border border-slate-300 rounded-lg overflow-hidden">
                 <div class="bg-slate-500 text-white px-4 py-2 font-medium text-sm flex justify-between items-center">
                     <span>Original Data (OCR Extracted)</span>
-                    <span class="bg-slate-600 px-2 py-0.5 rounded text-xs">Combined Bill</span>
+                    <span class="bg-slate-600 px-2 py-0.5 rounded text-xs" id="bill_type">Combined Bill</span>
                 </div>
                 <div class="p-4 bg-slate-50">
-                    <p class="text-slate-500 text-sm mb-1">Basic Pay (Jun-Oct)</p>
-                    <p class="text-3xl font-bold font-mono text-slate-800">₹ 91,540.00</p>
+                    <p class="text-slate-500 text-sm mb-1" id="orig_period">Basic Pay (Jun-Oct)</p>
+                    <p class="text-3xl font-bold font-mono text-slate-800" id="orig_basic">₹ 0.00</p>
                     <ul class="mt-4 space-y-2 text-sm text-slate-600 font-mono">
-                        <li class="flex justify-between"><span>DA</span> <span>₹ 52,735.00</span></li>
-                        <li class="flex justify-between"><span>HRA</span> <span>₹ 9,154.00</span></li>
+                        <li class="flex justify-between"><span>DA</span> <span id="orig_da">₹ 0.00</span></li>
+                        <li class="flex justify-between"><span>HRA</span> <span id="orig_hra">₹ 0.00</span></li>
                     </ul>
                 </div>
             </div>
@@ -39,13 +84,13 @@
             <div class="border border-prashasan-base rounded-lg overflow-hidden shadow-sm">
                 <div class="bg-prashasan-base text-white px-4 py-2 font-medium text-sm flex justify-between items-center">
                     <span>Corrected Data (7th CPC Matrix)</span>
-                    <span class="bg-prashasan-dark px-2 py-0.5 rounded text-xs">Level 2, Cell 1</span>
+                    <span class="bg-prashasan-dark px-2 py-0.5 rounded text-xs">Level Check</span>
                 </div>
                 <div class="p-4 bg-prashasan-light">
-                    <p class="text-prashasan-dark text-sm mb-1">Normalized Basic Pay</p>
-                    <p class="text-3xl font-bold font-mono text-prashasan-dark">₹ 19,900.00</p>
+                    <p class="text-prashasan-dark text-sm mb-1">Normalized Basic Pay (Per Month)</p>
+                    <p class="text-3xl font-bold font-mono text-prashasan-dark" id="corr_basic">₹ 0.00</p>
                     <ul class="mt-4 space-y-2 text-sm text-prashasan-dark font-mono">
-                        <li class="flex justify-between"><span>DA (Projected)</span> <span>₹ 11,542.00</span></li>
+                        <li class="flex justify-between"><span>DA (Projected)</span> <span id="corr_da">₹ 0.00</span></li>
                         <li class="flex justify-between items-center">
                             <span>HRA</span> 
                             <span class="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded border border-amber-200 font-sans">Manual Check</span>
@@ -55,85 +100,133 @@
             </div>
         </div>
 
-        <!-- 12-Month Ledger Table -->
+        <!-- Dynamic Ledger Table -->
         <div class="mt-8 flex justify-between items-end mb-4">
-            <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">12-Month Ledger (Mar - Feb)</h3>
-            <button class="text-prashasan-base text-sm font-medium hover:underline">Edit Ledger</button>
+            <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Extracted Ledger Data</h3>
         </div>
         
         <div class="overflow-x-auto border border-slate-200 rounded-lg">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider">
-                        <th class="p-3 border-b border-slate-200">Month</th>
+                        <th class="p-3 border-b border-slate-200">Period</th>
                         <th class="p-3 border-b border-slate-200 text-right">Basic Pay</th>
                         <th class="p-3 border-b border-slate-200 text-right">DA</th>
-                        <th class="p-3 border-b border-slate-200 text-right">GPF</th>
+                        <th class="p-3 border-b border-slate-200 text-right">Gross Pay</th>
                         <th class="p-3 border-b border-slate-200 text-right">Net Pay</th>
                         <th class="p-3 border-b border-slate-200">Status</th>
                     </tr>
                 </thead>
-                <tbody class="font-mono text-sm text-slate-700">
-                    <!-- Standard Month -->
-                    <tr class="border-b border-slate-100 hover:bg-slate-50">
-                        <td class="p-3 font-sans font-medium">March</td>
-                        <td class="p-3 text-right">19,900.00</td>
-                        <td class="p-3 text-right">9,950.00</td>
-                        <td class="p-3 text-right">1,200.00</td>
-                        <td class="p-3 text-right">29,150.00</td>
-                        <td class="p-3"><span class="bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full font-sans">✓ Extracted</span></td>
-                    </tr>
-                    
-                    <!-- Missing/Pending Month -->
-                    <tr class="border-b border-slate-100 bg-amber-50/30">
-                        <td class="p-3 font-sans font-medium">April</td>
-                        <td class="p-3 text-right text-slate-400">-</td>
-                        <td class="p-3 text-right text-slate-400">-</td>
-                        <td class="p-3 text-right text-slate-400">-</td>
-                        <td class="p-3 text-right text-slate-400">-</td>
-                        <td class="p-3"><span class="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full font-sans">Pending Review</span></td>
-                    </tr>
-
-                    <!-- Auto-Generated Month (January/February) -->
-                    <tr class="border-b border-slate-100 bg-prashasan-light/30">
-                        <td class="p-3 font-sans font-medium text-prashasan-dark flex items-center gap-1">
-                            January
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                        </td>
-                        <td class="p-3 text-right font-semibold">20,500.00</td>
-                        <td class="p-3 text-right">11,890.00</td>
-                        <td class="p-3 text-right">1,200.00</td>
-                        <td class="p-3 text-right">31,590.00</td>
-                        <td class="p-3"><span class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-sans">Auto-Generated</span></td>
-                    </tr>
+                <tbody class="font-mono text-sm text-slate-700" id="ledger_tbody">
+                    <!-- Rows will be injected here via JavaScript -->
                 </tbody>
             </table>
         </div>
 
         <div class="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center">
-            <button class="text-slate-500 font-medium hover:text-slate-800 transition-colors">
+            <button onclick="window.location.href='/'" class="text-slate-500 font-medium hover:text-slate-800 transition-colors">
                 &larr; Back to Upload
             </button>
-            <button class="bg-prashasan-base hover:bg-prashasan-hover text-white px-6 py-2.5 rounded-lg font-medium shadow transition-colors flex items-center gap-2">
+            <!-- Agar <a> tag hai toh aisa likho: -->
+            <button onclick="proceedToNextStep()" class="btn">
                 Confirm & Enter DDO Details
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
             </button>
         </div>
     </div>
 </div>
 
 <script>
-    // Highlight step 2 in the progress bar dynamically
+    const fmt = (num) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(num || 0);
+
     document.addEventListener("DOMContentLoaded", () => {
+        // Handle Stepper UI
         const steps = document.querySelectorAll('.rounded-full');
-        // Update Step 1 to completed
         steps[0].classList.replace('bg-prashasan-base', 'bg-emerald-500');
         steps[0].innerHTML = '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
-        
-        // Update Step 2 to active
         steps[1].classList.replace('bg-slate-200', 'bg-prashasan-base');
         steps[1].classList.replace('text-slate-500', 'text-white');
         steps[1].nextElementSibling.classList.replace('text-slate-500', 'text-prashasan-base');
+
+        // Load data from SessionStorage
+        const rawData = sessionStorage.getItem('extractedSlips');
+        if (!rawData) {
+            document.getElementById('ledger_tbody').innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-500">No data found. Please upload a file again.</td></tr>';
+            return;
+        }
+
+        const slips = JSON.parse(rawData);
+        if (slips.length === 0) return;
+
+        // --- NEW: Populate Personal Details ---
+        const mainSlip = slips[0];
+        
+        document.getElementById('emp_name').value = mainSlip.employee_name || "N/A";
+        document.getElementById('emp_pan_input').value = mainSlip.pan_no || "N/A";
+        document.getElementById('emp_gpf').value = mainSlip.gpf_no || "N/A";
+        document.getElementById('emp_desig').value = mainSlip.designation || "N/A";
+        
+        // Header PAN
+        document.getElementById('emp_pan_header').innerText = mainSlip.pan_no || "N/A";
+
+        // --- Populate Matrix Validation Data ---
+        document.getElementById('orig_period').innerText = `Basic Pay (${mainSlip.period.raw})`;
+        const isCombined = mainSlip.period.is_combined;
+        document.getElementById('bill_type').innerText = isCombined ? "Combined Bill" : "Single Month";
+
+        const origBasic = mainSlip.line_items.basic_pay || 0;
+        const origDa = mainSlip.line_items.da || 0;
+        const origHra = mainSlip.line_items.hra || 0;
+
+        document.getElementById('orig_basic').innerText = fmt(origBasic);
+        document.getElementById('orig_da').innerText = fmt(origDa);
+        document.getElementById('orig_hra').innerText = fmt(origHra);
+
+        const monthCount = isCombined && mainSlip.period.months ? mainSlip.period.months.length : 1;
+        document.getElementById('corr_basic').innerText = fmt(origBasic / monthCount);
+        document.getElementById('corr_da').innerText = fmt(origDa / monthCount);
+
+        // --- Populate Dynamic Ledger Table ---
+        const tbody = document.getElementById('ledger_tbody');
+        tbody.innerHTML = ''; 
+
+        slips.forEach(slip => {
+            const tr = document.createElement('tr');
+            tr.className = "border-b border-slate-100 hover:bg-slate-50";
+            
+            const statusBadge = slip.warnings && slip.warnings.length > 0 
+                ? '<span class="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full font-sans cursor-help" title="Warning Detected">⚠️ Review Needed</span>'
+                : '<span class="bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full font-sans">✓ Extracted</span>';
+
+            tr.innerHTML = `
+                <td class="p-3 font-sans font-medium text-slate-800">${slip.period.raw || 'Unknown'}</td>
+                <td class="p-3 text-right">${fmt(slip.line_items.basic_pay)}</td>
+                <td class="p-3 text-right">${fmt(slip.line_items.da)}</td>
+                <td class="p-3 text-right font-semibold">${fmt(slip.gross_salary)}</td>
+                <td class="p-3 text-right">${fmt(slip.net_pay)}</td>
+                <td class="p-3">${statusBadge}</td>
+            `;
+            tbody.appendChild(tr);
+        });
     });
+
+    // Validation & Routing for the next step
+// Validation & Routing for the next step
+    function proceedToNextStep() {
+        const office = document.getElementById('emp_office').value.trim();
+        const mobile = document.getElementById('emp_mobile').value.trim();
+        const email = document.getElementById('emp_email').value.trim();
+
+        if (!office || !mobile || !email) {
+            alert("Please fill in the required fields: Office Address, Mobile Number, and Email ID.");
+            return; // Form khali hone par code yahan ruk jayega
+        }
+
+        // Save manually entered data so we can use it during final PDF generation
+        const manualDetails = { office, mobile, email };
+        sessionStorage.setItem('manualPersonalDetails', JSON.stringify(manualDetails));
+
+        // REDIRECT YAHAN AAYEGA (Sab kuch theek hone ke baad)
+        window.location.href = `/ddo-details?user_id={{ user_id }}`;
+    }
 </script>
 {% endblock %}

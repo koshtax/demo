@@ -1,140 +1,564 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
+<title>Form 16 / Schedule of Income-Tax — Dynamic HTML Template</title>
+<style>
+  @page { size: A4 portrait; margin: 7mm 7mm 8mm 7mm; }
+  @page landscapePage { size: A4 landscape; margin: 6mm 6mm 7mm 6mm; }
+
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background:#fff; }
+  body {
+    /* Added standard Hindi fonts Mangal and Arial Unicode MS to prevent missing character boxes */
+    font-family: "Mangal", "Arial Unicode MS", "Noto Sans Devanagari", "Noto Sans", Arial, sans-serif;
+    color:#111;
+    font-size:7.8pt;
+    line-height:1.12;
+  }
+  .page {
+    width:100%;
+    min-height:279mm;
+    page-break-after:always;
+    position:relative;
+    background:#fff;
+  }
+  .page:last-child { page-break-after:auto; }
+  .landscape {
+    page: landscapePage;
+    min-height:0;
+  }
+
+  .center { text-align:center; }
+  .right { text-align:right; }
+  .bold { font-weight:700; }
+  .small { font-size:7pt; }
+  .tiny { font-size:6.5pt; }
+  .title { font-size:17pt; font-weight:700; margin-top:2mm; }
+  .subtitle { font-size:15pt; font-weight:700; margin:1mm 0; }
+  .section-title { font-size:9pt; font-weight:700; }
+
+  table {
+    width:100%;
+    border-collapse:collapse;
+    table-layout:fixed;
+  }
+  td, th {
+    border:0.45pt solid #111;
+    padding:1.1mm 1.4mm;
+    vertical-align:middle;
+  }
+  th { font-weight:700; }
+  .no-border td, .no-border th { border:0; }
+/* Reduced height to prevent page overflow */
+  .ledger th {
+    height: 22mm; 
+    padding: 0.5mm;
+    text-align: center;
+    vertical-align: middle;
+  }
+  .ledger td { 
+    height: 4.5mm; /* Pehle 5.4mm tha */
+    padding: 0.2mm 0.5mm; 
+  }
+  /* PAGE 1 */
+  .schedule-head { margin-bottom:1.5mm; }
+  .p1-info td { border:0; padding:0.7mm 1mm; }
+  .p1-info .label { width:20%; font-weight:700; }
+  .schedule { font-size:7.15pt; }
+  .schedule col.c1 { width:4.5%; }
+  .schedule col.c2 { width:70%; }
+  .schedule col.c3 { width:12.75%; }
+  .schedule col.c4 { width:12.75%; }
+  .schedule td { height:5.75mm; padding:0.45mm 1mm; }
+  .schedule .num { text-align:center; }
+  .schedule .amount { text-align:right; white-space:nowrap; }
+  .schedule .group { font-weight:700; }
+  .schedule .subhead { font-weight:700; }
+  .signature-row { margin-top:3mm; }
+  .signature-row td { height:13mm; vertical-align:bottom; }
+  .sig-space { border:0 !important; }
+
+  /* PAGE 2 */
+  .form16-title { margin-top:3mm; }
+  .p2-top { font-size:6.9pt; }
+  .p2-top td { height:7mm; }
+  .p2-top .h { text-align:center; }
+  .p2-summary { font-size:6.7pt; }
+  .p2-summary td { height:5.0mm; }
+  .p2-section { margin-top:1mm; }
+  .p2-section-title {
+    border:0.5pt solid #111;
+    border-bottom:0;
+    text-align:center;
+    font-weight:700;
+    padding:1mm;
+    font-size:7.2pt;
+  }
+  .p2-section-note {
+    border:0.5pt solid #111;
+    border-top:0;
+    text-align:center;
+    font-size:6.4pt;
+    padding:0.8mm;
+  }
+  .p2-grid { font-size:6.35pt; }
+  .p2-grid th { height:7.5mm; }
+  .p2-grid td { height:4.0mm; }
+  .p2-grid .sl { width:6%; text-align:center; }
+  .p2-grid .money { width:16%; text-align:right; }
+  .p2-grid .wide { width:24%; }
+  .verification { margin-top:1mm; font-size:7.1pt; }
+  .verification td { min-height:7mm; }
+  .verify-text { height:21mm; vertical-align:top; line-height:1.35; }
+  .bottom-sign td { height:7.5mm; }
+
+  /* PAGE 3 */
+  .p3 { font-size:6.65pt; }
+  .p3-main td { padding:0.38mm 0.75mm; }
+  .p3-main .amount { text-align:right; white-space:nowrap; }
+  .p3-main .label { text-align:left; }
+  .p3-main .section { font-weight:700; }
+  .p3-main .hgt1 td { height:4.4mm; }
+  .p3-main .hgt2 td { height:5.3mm; }
+  .p3-cols td:nth-child(1) { width:58%; }
+  .p3-cols td:nth-child(2) { width:10%; }
+  .p3-cols td:nth-child(3) { width:14%; }
+  .p3-cols td:nth-child(4) { width:18%; }
+  .deductions td { height:4mm; }
+  .chapter td { height:4.05mm; }
+  .tax-lines td { height:4.15mm; }
+  .p3-sign { margin-top:0; }
+  .p3-sign td { height:7mm; }
+
+  /* PAGE 4 */
+  .ledger-title { font-size:10pt; font-weight:700; text-align:center; margin-bottom:0.8mm; }
+  .ledger-subtitle { font-size:7.4pt; text-align:center; margin-bottom:1mm; }
+  .ledger { font-size:6.25pt; }
+  .ledger th {
+    height:27mm;
+    padding:0.5mm;
+    text-align:center;
+    vertical-align:middle;
+  }
+  .ledger th.vert {
+    writing-mode:vertical-rl;
+    transform:rotate(180deg);
+    white-space:nowrap;
+  }
+  .ledger td { height:5.4mm; padding:0.5mm 0.7mm; }
+  .ledger .month { width:11%; }
+  .ledger .num { text-align:right; white-space:nowrap; }
+  .ledger .text { text-align:left; }
+  .ledger .total { font-weight:700; }
+  .ledger .special td { height:7mm; }
+  .ledger .signature td { border:0; height:14mm; vertical-align:bottom; }
+
+  .dynamic { color:#111; }
+  .empty { color:transparent; }
+  .muted { color:#333; }
+
+  /* browser preview helpers */
+  @media screen {
+    body { background:#e9ecef; }
+    .page {
+      width:210mm;
+      min-height:297mm;
+      margin:8mm auto;
+      padding:0;
+      box-shadow:0 1mm 4mm rgba(0,0,0,.15);
+    }
+    .landscape {
+      width:297mm;
+      min-height:210mm;
+    }
+  }
+</style>
 </head>
+
 <body>
 
-    <!-- PAGE 1: Schedule of Income - Tax (Portrait) -->
-    <div class="portrait-section">
-        <h3 class="text-center">नई कर व्यवस्था के तहत<br>Schedule of Income - Tax<br>आयकर की अनुसूची</h3>
-        <p class="text-center">वित्तीय वर्ष {{ financial_year }} (कर निर्धारण वर्ष {{ assessment_year }})</p>
-        
-        <table class="no-border">
-            <tr>
-                <td class="no-border" width="20%">करदाता का नाम</td>
-                <td class="no-border bold">: {{ employee.name }}</td>
-            </tr>
-            <tr>
-                <td class="no-border">पदनाम</td>
-                <td class="no-border bold">: {{ employee.designation }}</td>
-            </tr>
-            <tr>
-                <td class="no-border">कार्यालय/विद्यालय का नाम</td>
-                <td class="no-border bold">: {{ employee.school }}</td>
-            </tr>
-            <tr>
-                <td class="no-border">स्थायी लेखा संख्या</td>
-                <td class="no-border bold">: {{ employee.pan }}</td>
-            </tr>
-        </table>
+<!-- =========================================================
+     PAGE 1 — SCHEDULE OF INCOME-TAX
+     ========================================================= -->
+<section class="page">
+  <div class="schedule-head center">
+    <div class="small">कर का भुगतान में भर कर दें</div>
+    <div class="title">Schedule of Income - Tax</div>
+    <div class="subtitle">आयकर की अनुसूची</div>
+    <div class="small">(चार प्रतियों में भर कर दें)</div>
+    <div class="bold">वित्तीय वर्ष {{ financial_year|default('2025–26') }} (कर निर्धारण वर्ष {{ assessment_year|default('2026–2027') }})</div>
+  </div>
 
-        <!-- Income Summary Table -->
-        <table>
-            <tr><th colspan="2" style="text-align: left;">क. वेतन स्रोत से आय का विवरण:</th><th>राशि</th></tr>
-            <tr>
-                <td>01.</td><td>वेतन (दिनांक 01.03.2025 से 29.02.2026 तक)</td><td class="text-right">{{ tax.total_basic }}</td>
-            </tr>
-            <tr>
-                <td>02.</td><td>महँगाई भत्ता</td><td class="text-right">{{ tax.total_da }}</td>
-            </tr>
-            <tr>
-                <td>03.</td><td>मकान किराया भत्ता</td><td class="text-right">{{ tax.total_hra }}</td>
-            </tr>
-            <tr>
-                <td>04.</td><td>चिकित्सा भत्ता</td><td class="text-right">{{ tax.total_medical }}</td>
-            </tr>
-            <tr>
-                <td>09.</td><td>बकाया वेतन एवं भत्ते की राशि</td><td class="text-right">{{ tax.total_arrears }}</td>
-            </tr>
-            <tr>
-                <td>10.</td><td class="bold">वेतन स्रोत से प्राप्त कुल आय</td><td class="text-right bold">{{ tax.gross_salary }}</td>
-            </tr>
-        </table>
-        
-        <!-- Add Tax Calculation Table here... -->
-    </div>
+  <table class="p1-info no-border">
+    <tr><td class="label">करदाता का नाम</td><td>: {{ employee_name|default('Nitin Chandraushaa Mallick') }}</td></tr>
+    <tr><td class="label">पदनाम</td><td>: {{ designation|default('Clerk') }}</td></tr>
+    <tr><td class="label">कार्यालय / विद्यालय का नाम</td><td>: {{ office_name|default('Utkramit +2 High School, Tubil') }}</td></tr>
+    <tr><td class="label">स्थायी लेखा सं. (PAN)</td><td>: {{ pan|default('ABCDE1234F') }} <span style="float:right">कोषागार का नाम : {{ treasury|default('Khunti') }}</span></td></tr>
+  </table>
 
-    <!-- PAGE 2: Form 16 Part A (Portrait) -->
-    <div class="page-break portrait-section">
-        <h3 class="text-center">FORM NO.16<br>PART A</h3>
-        <p class="text-center">Certificate under Section 203 of the Income-Tax Act, 1961...</p>
-        
-        <table>
-            <tr>
-                <td><b>Name and address of the Employer</b><br>{{ employer.name }}<br>{{ employer.address }}</td>
-                <td><b>Name and address of the Employee</b><br>{{ employee.name }}<br>{{ employee.school }}</td>
-            </tr>
-            <tr>
-                <td><b>PAN of the Deductor:</b> {{ employer.pan }}<br><b>TAN of the Deductor:</b> {{ employer.tan }}</td>
-                <td><b>PAN of the Employee:</b> {{ employee.pan }}</td>
-            </tr>
-        </table>
-    </div>
+  <table class="schedule">
+    <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+    <thead>
+      <tr>
+        <th>क</th><th>वेतन स्रोत से आय का विवरण :</th><th>राशि</th><th>राशि</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="num">01.</td><td>वेतन (दिनांक {{ salary_from|default('01.03.2025') }} से {{ salary_to|default('29.02.2026') }} तक)</td><td class="amount">{{ salary_amount|default('591000.00') }}</td><td></td></tr>
+      <tr><td class="num">02.</td><td>महंगाई भत्ता</td><td class="amount">{{ da_amount|default('338860.00') }}</td><td></td></tr>
+      <tr><td class="num">03.</td><td>मकान किराया भत्ता</td><td class="amount">{{ hra_amount|default('59100.00') }}</td><td></td></tr>
+      <tr><td class="num">04.</td><td>चिकित्सा भत्ता</td><td class="amount">{{ medical_amount|default('6000.00') }}</td><td></td></tr>
+      <tr><td class="num">05.</td><td>परिवहन भत्ता</td><td class="amount">{{ ta_amount|default('') }}</td><td></td></tr>
+      <tr><td class="num">06.</td><td>परिवहन भत्ता पर महंगाई भत्ता</td><td></td><td class="amount">{{ ta_da_amount|default('0.00') }}</td></tr>
+      <tr><td class="num">07.</td><td>विशेष वेतन / बोनस / मानदेय / नर्सिंग भत्ता</td><td></td><td></td></tr>
+      <tr><td class="num">08.</td><td>महंगाई भत्ता की बकाया राशि</td><td></td><td></td></tr>
+      <tr><td class="num">09.</td><td>बकाया वेतन एवं भत्ते का राशि</td><td class="amount">{{ arrear_amount|default('80870.00') }}</td><td></td></tr>
+      <tr class="group"><td class="num">10.</td><td>वेतन स्रोत से प्राप्त कुल आय</td><td></td><td class="amount">{{ gross_total_income|default('1075830.00') }}</td></tr>
 
-    <!-- PAGE 3: Form 16 Part B (Portrait) -->
-    <div class="page-break portrait-section">
-        <h3 class="text-center">PART B (Annexure)</h3>
-        <p class="text-center">DETAILS OF SALARY PAID AND ANY OTHER INCOME AND TAX DEDUCTION</p>
-        <!-- Add Part B dynamic tables here... -->
-    </div>
+      <tr class="subhead"><td class="num">ख</td><td>आयकर की संगणना</td><td></td><td></td></tr>
+      <tr><td class="num">01.</td><td>वेतन स्रोत से प्राप्त कुल-आय</td><td></td><td class="amount">{{ gross_total_income|default('1075830.00') }}</td></tr>
+      <tr><td class="num">02.</td><td>घटायें-धारा 16(ia) के अन्तर्गत मानक कटौती की राशि रू 75,000.00</td><td></td><td class="amount">{{ standard_deduction|default('75000.00') }}</td></tr>
+      <tr class="group"><td class="num">03.</td><td>सकल कुल आय</td><td></td><td></td></tr>
+      <tr><td class="num">04.</td><td>जोड़ें - गृह संपत्ति से आय</td><td></td><td></td></tr>
+      <tr><td class="num">05.</td><td>जोड़ें - बैंक / डाकघर से बचत खातों पर ब्याज इत्यादि से प्राप्त राशि</td><td></td><td></td></tr>
+      <tr><td class="num">07.</td><td>जोड़ें - बैंक / डाकघर में FD/RD खातों पर ब्याज इत्यादि से प्राप्त राशि</td><td></td><td></td></tr>
+      <tr class="group"><td class="num">08.</td><td>सकल कुल आय (Gross Total Income)</td><td></td><td class="amount">{{ gross_total_income_after_sd|default('1000830.00') }}</td></tr>
+      <tr class="group"><td class="num">09.</td><td>कर योग्य आय (क्र.10 के गुणक में परिवर्तित राशि)</td><td></td><td class="amount">{{ taxable_income|default('1000830.00') }}</td></tr>
+      <tr><td class="num">10.</td><td>रु. 1000830.00 पर देय आयकर</td><td></td><td></td></tr>
+      <tr><td colspan="2">रु 0–रु 4 Lakh: Nil</td><td></td><td></td></tr>
+      <tr><td colspan="2">₹4 Lakh – ₹8 Lakh: 5%</td><td class="amount">{{ slab_4_8|default('20000.00') }}</td><td></td></tr>
+      <tr><td colspan="2">₹8 Lakh – ₹12 Lakh: 10%</td><td class="amount">{{ slab_8_12|default('20083.00') }}</td><td></td></tr>
+      <tr><td colspan="2">₹12 Lakh – ₹16 Lakh: 15%</td><td class="amount">{{ slab_12_16|default('0.00') }}</td><td></td></tr>
+      <tr><td colspan="2">₹16 Lakh – ₹20 Lakh: 20%</td><td></td><td></td></tr>
+      <tr><td colspan="2">₹20 Lakh – ₹24 Lakh: 25%</td><td></td><td></td></tr>
+      <tr><td colspan="2">Above ₹24 Lakh: 30%</td><td></td><td></td></tr>
+      <tr class="group"><td></td><td>TOTAL</td><td></td><td class="amount">{{ tax_before_rebate|default('40083.00') }}</td></tr>
+      <tr><td class="num">11.</td><td>धारा-87A के तहत कर में राहत</td><td></td><td class="amount">{{ rebate_87a|default('40083.00') }}</td></tr>
+      <tr><td class="num">12.</td><td>शुद्ध देय आयकर</td><td></td><td class="amount">{{ net_tax|default('0.00') }}</td></tr>
+      <tr><td class="num">13.</td><td>जोड़ें-4% (शिक्षा उपकर+स्वास्थ्य एवं उच्च शिक्षा उपकर)</td><td></td><td class="amount">{{ cess|default('0.00') }}</td></tr>
+      <tr><td class="num">14.</td><td>आयकर और शिक्षा उपकर + स्वास्थ्य एवं उच्च शिक्षा उपकर का योग</td><td></td><td class="amount">{{ total_tax|default('0.00') }}</td></tr>
+      <tr><td class="num">15.</td><td>घटायें-धारा 89(i) के अन्तर्गत बकाया राशि पर आयकर में छूट (गणना तालिका संलग्न)</td><td></td><td class="amount">{{ relief_89|default('0.00') }}</td></tr>
+      <tr><td class="num">16.</td><td>घटायें-प्रतिमाह वेतन से आयकर का भुगतान या अग्रिम कर का भुगतान</td><td></td><td class="amount">{{ tds_paid|default('3000.00') }}</td></tr>
+      <tr><td class="num">17.</td><td>घटायें-चालान द्वारा जमा किया गया आयकर या अग्रिम कर (दिनांक ............)</td><td></td><td></td></tr>
+      <tr><td class="num">18.</td><td>वित्तीय वर्ष {{ financial_year|default('2025-26') }} में आयकर और शिक्षा उपकर की भुगतान राशि</td><td></td><td class="amount">{{ balance_or_refund|default('-3000.00') }}</td></tr>
+    </tbody>
+  </table>
 
-    <!-- PAGE 4: Monthly Salary Ledger (Landscape) -->
-    <!-- The class "landscape-section" flips just this page to A4 Landscape -->
-    <div class="page-break landscape-section">
-        <h4 class="text-center">वित्तीय वर्ष {{ financial_year }} में वेतन स्रोत से आय और कटौतियों की विवरणी</h4>
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>माह</th>
-                    <th>वेतन</th>
-                    <th>महंगाई भत्ता</th>
-                    <th>मकान किराया भत्ता</th>
-                    <th>चिकित्सा भत्ता</th>
-                    <th>सकल वेतन</th>
-                    <th>भविष्य निधि में</th>
-                    <th>GLI</th>
-                    <th>Prof Tax</th>
-                    <th>कुल कटौती</th>
-                    <th>आयकर (TDS)</th>
-                    <th>शुद्ध देय वेतन</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Loop through the 12 months data dynamically -->
-                {% for row in ledger %}
-                <tr>
-                    <td>{{ row.month_name }}</td>
-                    <td class="text-right">{{ row.basic }}</td>
-                    <td class="text-right">{{ row.da }}</td>
-                    <td class="text-right">{{ row.hra }}</td>
-                    <td class="text-right">{{ row.medical }}</td>
-                    <td class="text-right bold">{{ row.gross }}</td>
-                    <td class="text-right">{{ row.gpf }}</td>
-                    <td class="text-right">{{ row.gli }}</td>
-                    <td class="text-right">{{ row.prof_tax }}</td>
-                    <td class="text-right">{{ row.total_deduction }}</td>
-                    <td class="text-right">{{ row.tds }}</td>
-                    <td class="text-right bold">{{ row.net_pay }}</td>
-                </tr>
-                {% endfor %}
-                
-                <!-- Totals Row -->
-                <tr>
-                    <td class="bold">योग</td>
-                    <td class="text-right bold">{{ tax.total_basic }}</td>
-                    <td class="text-right bold">{{ tax.total_da }}</td>
-                    <!-- Add other totals... -->
-                </tr>
-            </tbody>
-        </table>
-        
-        <div style="margin-top: 30px; display: flex; justify-content: space-between;">
-            <div>नाम : {{ employee.name }}</div>
-            <div>हस्ताक्षर .........................</div>
-        </div>
+  <table class="signature-row no-border">
+    <tr>
+      <td class="sig-space" style="width:55%; vertical-align:bottom;">
+        <div style="font-size:12pt;font-family:cursive">{{ employee_signature|default('Nitin C. Mallick') }}</div>
+        <div>करदाता का हस्ताक्षर &nbsp;&nbsp; {{ signature_date|default('27.09.2026') }}</div>
+      </td>
+      <td class="sig-space" style="vertical-align:bottom;text-align:center;">
+        निकासी एवं व्ययन पदाधिकारी<br>का हस्ताक्षर एवं मुहर PAN
+      </td>
+    </tr>
+  </table>
+</section>
+
+<!-- =========================================================
+     PAGE 2 — FORM 16 PART A
+     ========================================================= -->
+<section class="page">
+  <div class="center form16-title">
+    <div class="title" style="font-size:14pt">T.D.S.</div>
+    <div class="title" style="font-size:14pt">FORM NO. 16</div>
+    <div class="title" style="font-size:14pt">PART A</div>
+    <div class="bold" style="font-size:8pt">
+      Certificate under Section 203 of the Income-Tax Act. 1961 for tax deduction at source from income chargeable<br>
+      under the head "SALARIES"
     </div>
+  </div>
+
+  <table class="p2-top">
+    <tr>
+      <th colspan="2" class="h">Name and address of the Employer</th>
+      <th colspan="2" class="h">Name and address of the Employee</th>
+    </tr>
+    <tr>
+      <td colspan="2">{{ employer_name_address|default('K.B. +2 High School, Arki, Khunti, Jharkhand') }}</td>
+      <td colspan="2">{{ employee_name|default('NITIN CHANDRAUSHAA MALLICK') }}<br>{{ office_name|default('UTKRAMIT +2 HIGH SCHOOL, TUBIL') }}</td>
+    </tr>
+    <tr>
+      <td>PAN of the<br>Deductor<br><br>{{ employer_pan|default('') }}</td>
+      <td>TAN of the Deductor<br><br>{{ tan|default('RANC12345E') }}</td>
+      <td>PAN of the Employee<br><br>{{ pan|default('ABCDE1234F') }}</td>
+      <td>Employee Reference No. Provided by the<br>Employer (if available)<br><br>{{ employee_reference|default('') }}</td>
+    </tr>
+    <tr>
+      <td rowspan="2">Address ................................................<br><br>City .................... Pin code ................</td>
+      <td rowspan="2">CIT (TDS)<br><br>{{ cit_tds|default('') }}</td>
+      <td>Assessment Year<br><br>{{ assessment_year|default('2026-2027') }}</td>
+      <td>Period with the Employer<br>From &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; To</td>
+    </tr>
+    <tr>
+      <td></td>
+      <td>{{ period_from|default('01.04.2025') }} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {{ period_to|default('31.03.2026') }}</td>
+    </tr>
+  </table>
+
+  <table class="p2-summary">
+    <tr><th colspan="5">Summary of amount paid/credited and tax deducted at source thereon in respect of the employee</th></tr>
+    <tr>
+      <th>Quarter(s)</th>
+      <th>Receipt Numbers of original quarterly statements<br>of TDS under sub-section (3) of section 200</th>
+      <th>Amount<br>paid/credited</th>
+      <th>Amount of tax deducted<br>(Rs)</th>
+      <th>Amount of tax deposited<br>/remitted (Rs)</th>
+    </tr>
+    <tr><td>Quarter 1</td><td>0</td><td></td><td class="right">{{ q1_tds|default('3000.00') }}</td><td></td></tr>
+    <tr><td>Quarter 2</td><td></td><td></td><td></td><td></td></tr>
+    <tr><td>Quarter 3</td><td></td><td></td><td></td><td></td></tr>
+    <tr><td>Quarter 4</td><td></td><td></td><td></td><td></td></tr>
+    <tr><td class="bold">Total (Rs.)</td><td></td><td></td><td class="right">{{ total_tds|default('3000.00') }}</td><td></td></tr>
+  </table>
+
+  <div class="p2-section">
+    <div class="p2-section-title">I. DETAILS OF TAX DEDUCTED AND DEPOSITED IN THE CENTRAL GOVERNMENT ACCOUNT THROUGH BOOK ADJUSTMENT</div>
+    <div class="p2-section-note">(The deductor to provide payment wise details of tax deducted and deposited with respect to the deductee)</div>
+    <table class="p2-grid">
+      <tr>
+        <th class="sl">Sl.</th>
+        <th class="money">Tax Deposited in the<br>respect of the<br>deductee (Rs.)</th>
+        <th class="wide" colspan="3">Book Identification Number (BIN)</th>
+        <th>Status of matching with<br>Form No. 24G</th>
+      </tr>
+      <tr><th>1</th><th></th><th>Receipt numbers of Form No.<br>24G</th><th>DDO serial number in Form<br>No. 24G</th><th>Date of transfer voucher<br>(dd/mm/yyyy)</th><th></th></tr>
+      {% for i in range(1,13) %}
+      <tr><td class="sl">{{ i }}</td><td></td><td></td><td></td><td></td><td></td></tr>
+      {% endfor %}
+      <tr><td colspan="2" class="bold">Total (Rs.)</td><td colspan="4"></td></tr>
+    </table>
+  </div>
+
+  <div class="p2-section">
+    <div class="p2-section-title">II. DETAILS OF TAX DEDUCTED AND DEPOSITED IN THE CENTRAL GOVERNMENT ACCOUNT THROUGH CHALLAN</div>
+    <div class="p2-section-note">(The deductor to provide payment wise details of tax deducted and deposited with respect to the deductee)</div>
+    <table class="p2-grid">
+      <tr>
+        <th class="sl">Sl.</th>
+        <th>Tax Deposited in the<br>respect of the<br>deductee (Rs.)</th>
+        <th>BSR Code of the Bank<br>Branch</th>
+        <th>Date of transfer voucher<br>(dd/mm/yyyy)</th>
+        <th>Challan Serial No.</th>
+        <th>Status of matching with<br>OLTAS</th>
+      </tr>
+      {% for i in range(1,5) %}
+      <tr><td class="sl">{{ i }}</td><td class="right">{% if i == 1 %}{{ challan_tax|default('3000.00') }}{% endif %}</td><td></td><td></td><td></td><td></td></tr>
+      {% endfor %}
+      <tr><td colspan="2" class="bold">Total (Rs.)</td><td colspan="4"></td></tr>
+    </table>
+  </div>
+
+  <table class="verification">
+    <tr><th colspan="2">Verification</th></tr>
+    <tr>
+      <td colspan="2" class="verify-text">
+        I ................................................ son/daughter of ................................................ working in the capacity of<br>
+        ................................................ (designation) do hereby certify that a sum of Rs. ...................... [Rs. ......................<br>
+        (in word)] has been deducted and deposited to the Credit of the Central Government. I further certify that the information given above is true, complete and correct<br>
+        and is based on the books of account, documents, TDS statements, TDS deposited and other available records.
+      </td>
+    </tr>
+    <tr class="bottom-sign">
+      <td style="width:38%">Place<br><br>KHUNTI</td>
+      <td>Signature of person responsible for deduction of tax</td>
+    </tr>
+    <tr class="bottom-sign">
+      <td>Date<br><br>{{ signature_date|default('27.09.2026') }}</td>
+      <td>Designation &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Full Name: {{ officer_name|default('DDO, K.B. +2 High School') }}</td>
+    </tr>
+  </table>
+</section>
+
+<!-- =========================================================
+     PAGE 3 — FORM 16 PART B (ANNEXURE)
+     ========================================================= -->
+<section class="page p3">
+  <div class="center" style="font-size:13pt;font-weight:700;margin:2mm 0 1mm">
+    PART B (Annexure)
+  </div>
+  <div class="center bold" style="font-size:8.5pt">
+    DETAILS OF SALARY PAID AND ANY OTHER INCOME AND TAX DEDUCTION
+  </div>
+
+  <table class="p3-main">
+    <colgroup>
+      <col style="width:58%">
+      <col style="width:9%">
+      <col style="width:14%">
+      <col style="width:19%">
+    </colgroup>
+    <tr class="hgt1"><td colspan="4" class="section">1. GROSS SALARY</td></tr>
+    <tr class="hgt1"><td>(A) Salary as per provisions contained in sec. 17(1)</td><td>Rs.</td><td class="amount">{{ gross_salary|default('1075830.00') }}</td><td></td></tr>
+    <tr class="hgt1"><td>(B) Value of perquisites u/s 17(2)</td><td></td><td class="amount">0.00</td><td></td></tr>
+    <tr class="hgt1"><td>(C) Profits in lieu of salary under Section 17(3)</td><td></td><td class="amount">0.00</td><td></td></tr>
+    <tr class="hgt1"><td>(d) TOTAL</td><td>Rs.</td><td class="amount">{{ gross_salary|default('1075830.00') }}</td><td></td></tr>
+    <tr class="hgt1"><td>(e) Reported total amount of salary received from other employees</td><td>Rs.</td><td class="amount">0.00</td><td></td></tr>
+    <tr class="hgt1"><td>Less:- Loss from house property sec 24</td><td>Rs.</td><td class="amount">0.00</td><td></td></tr>
+    <tr class="hgt1"><td>2. LESS : Allowance to the extent exempt u/s 10</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>Allowance</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td></td><td></td><td></td><td></td></tr>
+    <tr class="hgt2"><td class="section">3. BALANCE (1-2)</td><td>Rs.</td><td class="amount">{{ gross_salary|default('1075830.00') }}</td><td></td></tr>
+    <tr class="hgt1"><td class="section">4. DEDUCTIONS :</td><td></td><td></td><td></td></tr>
+    <tr class="hgt1"><td>(a) Standard Deduction.</td><td>Rs.</td><td class="amount">{{ standard_deduction|default('75000.00') }}</td><td></td></tr>
+    <tr class="hgt1"><td>(b) Tax on Employment</td><td>Rs.</td><td class="amount">0.00</td><td></td></tr>
+    <tr class="hgt1"><td class="section">5. AGGREGATE OF 4 (a and b)</td><td>Rs.</td><td class="amount">{{ standard_deduction|default('75000.00') }}</td><td></td></tr>
+    <tr class="hgt1"><td class="section">6. INCOME CHARGEABLE UNDER THE HEAD SALARY (3-5)</td><td></td><td></td><td class="amount">{{ taxable_income|default('1000830.00') }}</td></tr>
+    <tr class="hgt1"><td class="section">7. ADD : ANY OTHER INCOME REPORTED BY THE EMPLOYEE</td><td></td><td></td><td></td></tr>
+    <tr><td>Income</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td></td><td></td><td></td><td></td></tr>
+    <tr class="hgt2"><td class="section">8. GROSS TOTAL INCOME (6+7)</td><td></td><td></td><td class="amount">{{ taxable_income|default('1000830.00') }}</td></tr>
+  </table>
+
+  <table class="p3-main chapter">
+    <colgroup><col style="width:58%"><col style="width:10%"><col style="width:14%"><col style="width:18%"></colgroup>
+    <tr><td class="section">9. Deduction under chapter VI-A</td><td></td><td class="center bold">Qualifying Amount</td><td class="center bold">Deductible Amount</td></tr>
+    <tr><td class="section">(A) Sections 80C, 80 CCC and 80 CCD</td><td></td><td></td><td></td></tr>
+    <tr><td>(a) Section 80C Amount</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(i) GPF</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(ii) LIC (including G.I.)</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(iii) LIC Premium</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(iv) NSC Purchased/PPF/PLI</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(v) Bank Fixed Deposits</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(vi) Tuition fee</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(vii) Repayment of HBA/</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(viii) Equity Linked Saving Scheme/Mutual Fund</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(ix) Interest of NSC Reinvested</td><td>Rs.</td><td></td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(x) Total section 80C</td><td>Rs.</td><td>0.00</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(vii) Total Section 80C</td><td></td><td>0.00</td><td></td></tr>
+    <tr><td>(b) Sections 80 CCC</td><td></td><td>0.00</td><td></td></tr>
+    <tr><td>(c) Sections 80CCD</td><td></td><td></td><td></td></tr>
+    <tr><td colspan="4" class="small">Note : Aggregate amount deducted under section 80C, 80CCC and 80CCD(1) shall not exceed 1.5 lakh rupees.</td></tr>
+    <tr><td class="section">(B) Other sections (e.g. 80E, 80EE, 80G, 80TTA etc.</td><td></td><td></td><td></td></tr>
+    <tr><td>(i) Section- 80CCG</td><td></td><td></td><td></td></tr>
+    <tr><td>(ii) Section- 80D</td><td></td><td>0.00</td><td>0.00</td></tr>
+    <tr><td>(iii) Section- 80DD</td><td></td><td></td><td></td></tr>
+    <tr><td>(iv) Section- 80DDB</td><td></td><td></td><td></td></tr>
+    <tr><td>(v) Section- 80E</td><td></td><td></td><td></td></tr>
+    <tr><td>(vi) Section- 80EE</td><td></td><td></td><td></td></tr>
+    <tr><td>(vii) Section- 80G</td><td></td><td>0.00</td><td>0.00</td></tr>
+    <tr><td>(viii) Section- 80TTA</td><td></td><td></td><td></td></tr>
+    <tr><td>(ix) Section- 80U</td><td></td><td></td><td></td></tr>
+    <tr><td>(x) Total section of B</td><td></td><td></td><td>0.00</td></tr>
+  </table>
+
+  <table class="p3-main tax-lines">
+    <colgroup><col style="width:70%"><col style="width:12%"><col style="width:18%"></colgroup>
+    <tr><td class="section">10. Aggregate of deductable amount under Chapter VI-A[(A)+(B)]</td><td>Rs.</td><td class="amount">0.00</td></tr>
+    <tr><td class="section">11. Total Income (8-10)(R/o to the nearest rupees ten)</td><td>Rs.</td><td class="amount">{{ taxable_income|default('1000830.00') }}</td></tr>
+    <tr><td class="section">12. Tax on total income</td><td>Rs.</td><td class="amount">{{ tax_before_rebate|default('40083.00') }}</td></tr>
+    <tr><td class="section">13. Less : Rebate under Section 87A</td><td>Rs.</td><td class="amount">{{ rebate_87a|default('40083.00') }}</td></tr>
+    <tr><td class="section">14. Total Tax Payable (12-13)</td><td>Rs.</td><td class="amount">0.00</td></tr>
+    <tr><td class="section">15. Education cess @4% (on tax computed at S.No. 14)</td><td>Rs.</td><td class="amount">0.00</td></tr>
+    <tr><td class="section">16. Tax : Payable (14+15)</td><td>Rs.</td><td class="amount">0.00</td></tr>
+    <tr style="height:13mm"><td class="section">17. Less : Relief under section 89 (attach details)</td><td></td><td></td></tr>
+    <tr><td class="section">18. Tax payable (16-17)</td><td>Rs.</td><td class="amount">0.00</td></tr>
+  </table>
+
+  <table class="p3-main p3-sign">
+    <tr><td colspan="2">................................................ son/daughter of ................................................ working in the capacity of<br>................................................ (designation) do hereby certify that a sum of Rs. ........................ [Rs. ........................]</td></tr>
+    <tr><td style="width:55%">Place KHUNTI<br><br>Date</td><td>Signature of person responsible for deduction of tax</td></tr>
+    <tr><td>Designation</td><td>Full Name: {{ officer_name|default('DDO, K.B. +2 High School') }}</td></tr>
+  </table>
+</section>
+
+<!-- =========================================================
+     PAGE 4 — SALARY LEDGER (FIXED 15 COLUMNS)
+     ========================================================= -->
+<section class="page landscape">
+  <div class="ledger-title">
+    वित्तीय वर्ष {{ financial_year|default('2025–26') }} में वेतन स्रोत से आय और कटौतियों का विवरण
+  </div>
+  <div class="ledger-subtitle">
+    नाम : {{ employee_name|default('Nitin Chandraushaa Mallick') }} &nbsp;&nbsp;
+    पदनाम : {{ designation|default('Clerk') }} &nbsp;&nbsp;
+    कार्यालय का नाम एवं पता : {{ office_name|default('Utkramit +2 High School, Tubil') }}
+  </div>
+
+  <table class="ledger">
+    <thead>
+      <tr>
+        <th class="month">माह</th>
+        <th class="vert">वेतन</th>
+        <th class="vert">महंगाई भत्ता</th>
+        <th class="vert">मकान किराया भत्ता</th>
+        <th class="vert">चिकित्सा भत्ता</th>
+        <th class="vert">यात्रा भत्ता</th>
+        <th class="vert">कुल सकल आय</th>
+        <th class="vert">भविष्य निधि में कर्मचारी अंशदान</th>
+        <th class="vert">स्वास्थ्य बीमा/अन्य</th>
+        <th class="vert">समूह बीमा योजना</th>
+        <th class="vert">पेशेवर कर</th>
+        <th class="vert">आयकर</th>
+        <th class="vert">अन्य कटौती</th>
+        <th class="vert">कुल कटौती</th>
+        <th class="vert">शुद्ध भुगतान</th>
+      </tr>
+    </thead>
+
+    <tbody>
+            
+      <!-- Real-World Dynamic Loop: Jitne mahine ka data DB me hoga, bas utni row print hongi -->
+      {% for m in ledger_data %}
+      <tr>
+        <td class="text">{{ m.month }}</td>
+        <td class="num">{{ m.basic_pay | default('0.00') }}</td>
+        <td class="num">{{ m.da | default('0.00') }}</td>
+        <td class="num">{{ m.hra | default('0.00') }}</td>
+        <td class="num">{{ m.medical | default('0.00') }}</td>
+        <td class="num">{{ m.ta | default('0.00') }}</td> 
+        <td class="num">{{ m.gross_salary | default('0.00') }}</td>
+        <td class="num">{{ m.gpf | default('0.00') }}</td>
+        <td class="num">{{ m.health_ins | default('0.00') }}</td>
+        <td class="num">{{ m.gis | default('0.00') }}</td>
+        <td class="num">{{ m.prof_tax | default('0.00') }}</td>
+        <td class="num">{{ m.income_tax | default('0.00') }}</td> 
+        <td class="num">{{ m.other_deductions | default('0.00') }}</td>            
+        <td class="num">{{ m.total_deductions | default('0.00') }}</td> 
+        <td class="num">{{ m.net_pay | default('0.00') }}</td> 
+      </tr>
+      {% endfor %}
+      
+      <!-- Arrears & Specials (Agar Backend Bheje Toh) -->
+      {% if tax_data.da_arrears %}
+      <tr class="special">
+        <td class="text">महंगाई भत्ता बकाया</td>
+        <td class="num">0.00</td><td class="num">{{ tax_data.da_arrears }}</td><td class="num">0.00</td><td></td><td></td><td class="num">{{ tax_data.da_arrears }}</td>
+        <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="num">{{ tax_data.da_arrears }}</td>
+      </tr>
+      {% endif %}
+      
+      <!-- TOTAL ROWS -->
+      <tr class="total">
+        <td>योग</td>
+        <td class="num">{{ tax_data.total_basic | default('0.00') }}</td>
+        <td class="num">{{ tax_data.total_da | default('0.00') }}</td>
+        <td class="num">{{ tax_data.total_hra | default('0.00') }}</td>
+        <td class="num">{{ tax_data.total_med | default('0.00') }}</td>
+        <td class="num">{{ tax_data.total_ta | default('0.00') }}</td>
+        <td class="num">{{ tax_data.gross_salary | default('0.00') }}</td>
+        <td class="num">{{ tax_data.total_gpf | default('0.00') }}</td>
+        <td class="num">0.00</td>
+        <td class="num">{{ tax_data.total_gis | default('0.00') }}</td>
+        <td class="num">{{ tax_data.total_prof_tax | default('0.00') }}</td>
+        <td class="num">0.00</td><td class="num">0.00</td>
+        <td class="num">{{ tax_data.total_deductions_sum | default('0.00') }}</td>
+        <td class="num">{{ tax_data.net_pay_sum | default('0.00') }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table class="ledger no-border">
+    <tr class="signature">
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td colspan="3" style="text-align:right;font-family:cursive;font-size:12pt">
+        {{ employee_signature|default('Nitin C. Mallick') }}<br><span style="font-family:Arial;font-size:7pt">{{ signature_date|default('27.09.2026') }}</span>
+      </td>
+    </tr>
+  </table>
+</section>
 
 </body>
 </html>

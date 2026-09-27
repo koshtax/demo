@@ -7,33 +7,6 @@
         <p class="text-sm text-slate-500 mt-1">Enter your details and DDO TAN. The system will auto-fill DDO info if it exists in our cache.</p>
     </div>
 
-    <div class="p-8">
-        <!-- Section 1: Employee Details -->
-        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4 border-b pb-2">1. Your Details</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                <input type="text" id="emp_name" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:outline-none focus:border-prashasan-base focus:ring-1 focus:ring-prashasan-base bg-slate-50" readonly value="MD ABID ANWAR">
-                <p class="text-xs text-slate-500 mt-1">Auto-fetched from salary slip</p>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">PAN Number</label>
-                <input type="text" id="emp_pan" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:outline-none focus:border-prashasan-base focus:ring-1 focus:ring-prashasan-base bg-slate-50" readonly value="BEVPA7707N">
-            </div>
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-slate-700 mb-1">Office / School Name</label>
-                <input type="text" id="emp_school" placeholder="e.g. Utkramit +2 High School, Tubil" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:outline-none focus:border-prashasan-base focus:ring-1 focus:ring-prashasan-base">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Mobile Number</label>
-                <input type="tel" id="emp_mobile" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:outline-none focus:border-prashasan-base focus:ring-1 focus:ring-prashasan-base">
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1">Email ID</label>
-                <input type="email" id="emp_email" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:outline-none focus:border-prashasan-base focus:ring-1 focus:ring-prashasan-base">
-            </div>
-        </div>
-
         <!-- Section 2: Employer Details (The TAN Cache Magic) -->
         <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4 border-b pb-2">2. Employer / DDO Details</h3>
         
@@ -80,98 +53,108 @@
             <button class="text-slate-500 font-medium hover:text-slate-800 transition-colors">
                 &larr; Back to Review
             </button>
-            <button id="proceed_payment_btn" class="bg-prashasan-base hover:bg-prashasan-hover text-white px-6 py-2.5 rounded-lg font-medium shadow transition-colors flex items-center gap-2">
-                Save & Proceed to Payment
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            <button onclick="proceedToPayment(event)" class="btn">
+                Proceed to Payment
             </button>
         </div>
     </div>
 </div>
-
 <script>
-    // Update Stepper UI on load
     document.addEventListener("DOMContentLoaded", () => {
-        const steps = document.querySelectorAll('.rounded-full');
+        const tanInput = document.getElementById("tan_number");
+        const statusIcon = document.getElementById("tan_status_icon");
         
-        // Steps 1 & 2 completed
-        for(let i=0; i<2; i++) {
-            steps[i].classList.replace('bg-prashasan-base', 'bg-emerald-500');
-            steps[i].classList.replace('bg-slate-200', 'bg-emerald-500');
-            steps[i].classList.replace('text-slate-500', 'text-white');
-            steps[i].innerHTML = '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
-        }
-        
-        // Step 3 active
-        steps[2].classList.replace('bg-slate-200', 'bg-prashasan-base');
-        steps[2].classList.replace('text-slate-500', 'text-white');
-        steps[2].nextElementSibling.classList.replace('text-slate-500', 'text-prashasan-base');
-    });
+        // Fixed IDs to exactly match your HTML inputs
+        const ddoName = document.getElementById("officer_name"); 
+        const ddoDesig = document.getElementById("designation");
+        const officeAddress = document.getElementById("employer_address");
+        const empName = document.getElementById("employer_name");
 
-    // TAN Cache Auto-fetch Logic
-    const tanInput = document.getElementById('tan_number');
-    const msgElement = document.getElementById('tan_message');
-    const ddoArea = document.getElementById('ddo_form_area');
+        if (tanInput) {
+            tanInput.addEventListener("blur", async (e) => {
+                const tan = e.target.value.trim().toUpperCase();
+                e.target.value = tan; // convert to uppercase visually
+                
+                if (tan.length >= 10) {
+                    statusIcon.innerHTML = '⏳';
+                    statusIcon.classList.remove("hidden");
 
-    tanInput.addEventListener('blur', async (e) => {
-        const tan = e.target.value.trim().toUpperCase();
-        if (tan.length >= 10) {
-            msgElement.innerHTML = '<span class="text-amber-500">Checking database...</span>';
-            
-            try {
-                // Fetch from our FastAPI backend
-                const response = await fetch(`/api/employer/${tan}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    
-                    // Auto-fill fields
-                    document.getElementById('officer_name').value = data.officer_name || '';
-                    document.getElementById('officer_father_name').value = data.officer_father_name || '';
-                    document.getElementById('employer_name').value = data.employer_name || '';
-                    document.getElementById('employer_address').value = data.employer_address || '';
-                    document.getElementById('designation').value = data.designation || '';
-                    document.getElementById('employer_pan').value = data.pan || '';
-                    
-                    // Visual feedback
-                    ddoArea.classList.add('bg-emerald-50', 'border-emerald-200');
-                    msgElement.innerHTML = '<span class="text-emerald-600 font-medium">✓ DDO Details auto-filled from database. You can edit if needed.</span>';
+                    try {
+                        const response = await fetch(`/api/employer/${tan}`);
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            // Auto-fill the fields properly
+                            if (ddoName) ddoName.value = data.officer_name || "";
+                            if (ddoDesig) ddoDesig.value = data.designation || "";
+                            if (officeAddress) officeAddress.value = data.employer_address || data.address || "";
+                            if (empName) empName.value = data.employer_name || "";
+                            
+                            statusIcon.innerHTML = '✅';
+                            statusIcon.classList.add("text-emerald-500");
+                        } else {
+                            statusIcon.innerHTML = '❌';
+                            statusIcon.classList.add("text-slate-400");
+                        }
+                    } catch (error) {
+                        console.error("TAN lookup failed:", error);
+                        statusIcon.classList.add("hidden");
+                    }
                 } else {
-                    // Not found, clear fields for manual entry
-                    ddoArea.classList.remove('bg-emerald-50', 'border-emerald-200');
-                    document.querySelectorAll('#ddo_form_area input').forEach(input => input.value = '');
-                    msgElement.innerHTML = '<span class="text-prashasan-base">New TAN detected. Please fill the DDO details manually. They will be saved for future use.</span>';
+                    statusIcon.classList.add("hidden");
                 }
-            } catch (error) {
-                msgElement.innerHTML = '<span class="text-red-500">Error connecting to server. Please enter manually.</span>';
-            }
+            });
         }
     });
 
-    // Save Data Logic (Triggered on 'Proceed to Payment')
-    document.getElementById('proceed_payment_btn').addEventListener('click', async () => {
-        const payload = {
-            tan: document.getElementById('tan_number').value.toUpperCase(),
-            officer_name: document.getElementById('officer_name').value,
-            officer_father_name: document.getElementById('officer_father_name').value,
-            employer_name: document.getElementById('employer_name').value,
-            employer_address: document.getElementById('employer_address').value,
-            designation: document.getElementById('designation').value,
-            pan: document.getElementById('employer_pan').value
-        };
+    // Handle form submission, save to database, and redirect to payment
+    async function proceedToPayment(event) {
+        if(event) event.preventDefault();
 
-        if(!payload.tan || !payload.officer_name) {
-            alert("Please fill in the required DDO details.");
+        // 1. Form se data uthao
+        const tan = document.getElementById("tan_number").value.trim();
+        const officer_name = document.getElementById("officer_name").value.trim();
+        const officer_father_name = document.getElementById("officer_father_name").value.trim();
+        const employer_name = document.getElementById("employer_name").value.trim();
+        const designation = document.getElementById("designation").value.trim();
+        const employer_address = document.getElementById("employer_address").value.trim();
+        const employer_pan = document.getElementById("employer_pan").value.trim();
+
+        // TAN zaroori hai
+        if (!tan) {
+            alert("Please enter the DDO TAN Number.");
             return;
         }
 
-        // Post back to FastAPI to upsert TAN cache
-        await fetch('/api/employer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        // Navigate to payment page (next step)
-        window.location.href = '/payment';
-    });
+        // 2. Data ko API bhejne ke liye pack karo
+        const payload = {
+            tan: tan,
+            officer_name: officer_name,
+            officer_father_name: officer_father_name,
+            employer_name: employer_name,
+            designation: designation,
+            employer_address: employer_address,
+            pan: employer_pan
+        };
+
+        try {
+            // 3. Backend API ko data bhejo taaki database me hamesha ke liye save ho jaye
+            await fetch("/api/employer", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            // 4. Data save hone ke baad safely asali ID lekar Payment page par jao!
+            window.location.href = `/payment?user_id={{ user_id }}`;
+            
+        } catch (error) {
+            console.error("Error saving DDO details:", error);
+            // Backup redirect agar network issue aaya
+            window.location.href = `/payment?user_id={{ user_id }}`;
+        }
+    }
 </script>
 {% endblock %}

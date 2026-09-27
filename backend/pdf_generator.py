@@ -27,7 +27,7 @@ def generate_form16_pdf(user_data, ledger_data, tax_data, employer_data, output_
             "pan": employer_data.pan,
             "address": employer_data.employer_address
         },
-        "tax": tax_data, # Tax calculations (gross, deductions, 87A rebate, etc.)
+        "tax_data": tax_data, # Tax calculations (gross, deductions, 87A rebate, etc.)
         "ledger": ledger_data # Array of 12 months data + arrears
     }
 

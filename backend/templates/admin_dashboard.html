@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+    <!-- Header -->
+    <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div>
+            <h2 class="text-xl font-semibold text-slate-800">Admin Control Panel</h2>
+            <p class="text-sm text-slate-500 mt-1">Manage Form 16 Requests & Payments</p>
+        </div>
+        <div class="flex gap-4 items-center">
+            <span class="text-sm font-medium text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">System Online</span>
+            <a href="/admin/logout" class="text-sm font-semibold text-red-500 hover:text-red-700 underline">Logout</a>
+        </div>
+    </div>
+
+    <!-- Data Table Area -->
+    <div class="p-6">
+        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">Pending Verifications</h3>
+        
+        <div class="overflow-x-auto border border-slate-200 rounded-lg">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider">
+                        <th class="p-3 border-b border-slate-200">Employee Name</th>
+                        <th class="p-3 border-b border-slate-200">PAN / GPF</th>
+                        <th class="p-3 border-b border-slate-200">DDO Code</th>
+                        <th class="p-3 border-b border-slate-200">UTR Number</th>
+                        <th class="p-3 border-b border-slate-200">Action</th>
+                    </tr>
+                </thead>
+                    <tbody class="divide-y divide-slate-100">
+        {% for user in users %}
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="p-4 text-sm font-medium text-slate-800">{{ user.name }}</td>
+            <td class="p-4 text-sm text-slate-600">{{ user.pan }}</td>
+            <td class="p-4 text-sm text-slate-600 font-mono text-xs">₹{{ user.amount }}</td>
+            <td class="p-4 text-sm text-slate-600 font-mono tracking-wide">{{ user.utr_number }}</td>
+            <td class="p-4 text-sm">
+                {% if user.status == 'approved' %}
+                    <span class="bg-emerald-100 text-emerald-700 text-xs px-3 py-1 rounded-full font-semibold border border-emerald-200">APPROVED</span>
+                {% else %}
+                    <form action="/admin/payment/approve/{{ user.id }}" method="POST" class="inline">
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-1.5 rounded-md font-medium transition-colors shadow-sm">
+                            Approve
+                        </button>
+                    </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="5" class="p-8 text-center text-slate-500 text-sm">No pending payments found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

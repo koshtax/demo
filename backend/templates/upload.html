@@ -60,7 +60,7 @@
 <script>
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('file-upload');
-    const extractBtn = document.getElementById('extract_btn'); // Button me ye id add karni hogi
+    const extractBtn = document.querySelector('button'); 
 
     // Click to upload
     dropzone.addEventListener('click', () => {
@@ -78,7 +78,7 @@
     });
 
     // Extract Data button click logic
-    document.querySelector('button').addEventListener('click', async (e) => {
+    extractBtn.addEventListener('click', async (e) => {
         const btn = e.currentTarget;
         
         if (fileInput.files.length === 0) {
@@ -101,8 +101,15 @@
             });
 
             if (response.ok) {
-                // Success hone par sidha Step 2 par bhej do
-                window.location.href = '/review';
+                const result = await response.json();
+                
+                // DATA SAVE KARNE WALI MAIN LINE
+                sessionStorage.setItem('extractedSlips', JSON.stringify(result.data));
+                
+                const finalUserId = result.user_id || result.id || crypto.randomUUID();
+                // YAHAN data.user_id ki jagah result.user_id aayega
+                window.location.href = "/review?user_id=" + finalUserId;
+                
             } else {
                 const error = await response.json();
                 alert("Error: " + error.detail);
@@ -110,7 +117,8 @@
                 btn.disabled = false;
             }
         } catch (error) {
-            alert("Server connection failed.");
+            console.error(error); // Ye browser console me asali error dikhayega
+            alert("Server connection failed. Please try again.");
             btn.innerHTML = originalText;
             btn.disabled = false;
         }

@@ -9,6 +9,10 @@ from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
+from fastapi import Request, Form, Response, Cookie
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.exc import IntegrityError
+from fastapi import HTTPException
 
 # 1. Tumhare Models Import (Ensure models.py is in the same folder)
 from models import SessionLocal, EmployerCache, MonthlyLedger, User, AdminSettings, Payment, EmployeeDetail
@@ -72,15 +76,23 @@ def read_root(request: Request):
     return templates.TemplateResponse(request=request, name="upload.html")
 
 @app.get("/review")
-def review_page(request: Request):
-    return templates.TemplateResponse(request=request, name="review.html")
+def review_page(request: Request, user_id: str = ""):
+    return templates.TemplateResponse(
+        request=request, 
+        name="review.html", 
+        context={"user_id": user_id}
+    )
 
 @app.get("/ddo-details")
-def ddo_details_page(request: Request):
-    return templates.TemplateResponse(request=request, name="ddo_details.html")
+def ddo_details_page(request: Request, user_id: str = ""):
+    return templates.TemplateResponse(
+        request=request, 
+        name="ddo_details.html", 
+        context={"user_id": user_id}
+    )
 
 @app.get("/payment")
-def payment_page(request: Request, db: Session = Depends(get_db)):
+def payment_page(request: Request, user_id: str = "1", db: Session = Depends(get_db)):
     # Dynamically fetch admin details for the QR code
     settings = db.query(AdminSettings).first()
     upi_id = settings.upi_id if settings else "admin@ybl"
@@ -91,7 +103,8 @@ def payment_page(request: Request, db: Session = Depends(get_db)):
         name="payment.html", 
         context={
             "upi_id": upi_id,
-            "fee_amount": fee_amount
+            "fee_amount": fee_amount,
+            "user_id": user_id  # Ab ye crash nahi hoga
         }
     )
 # ==========================================
@@ -198,6 +211,102 @@ def save_monthly_ledger(ledger_data: LedgerSchema, db: Session = Depends(get_db)
     db.refresh(new_ledger)
     return {"message": "Salary data stored successfully", "ledger_id": new_ledger.id}
 
+# ==========================================
+# ADMIN PANEL ROUTES (UPDATED FIX)
+# ==========================================
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request, admin_session: str = Cookie(None)):
+    if admin_session == "authenticated":
+        return RedirectResponse(url="/admin/dashboard")
+    # FIX: Added explicitly named parameters (request=, name=, context=)
+    return templates.TemplateResponse(request=request, name="admin_login.html", context={"request": request, "error": None})
+
+
+@app.post("/admin/login")
+async def admin_login(request: Request, username: str = Form(...), password: str = Form(...)):
+    if username == "admin_27" and password == "@admin_def27":
+        response = RedirectResponse(url="/admin/dashboard", status_code=303)
+        response.set_cookie(key="admin_session", value="authenticated", httponly=True)
+        return response
+    else:
+        return templates.TemplateResponse(request=request, name="admin_login.html", context={"request": request, "error": "Galat ID ya Password!"})
+
+@app.get("/admin/dashboard", response_class=HTMLResponse)
+async def admin_dashboard(request: Request, admin_session: str = Cookie(None), db: Session = Depends(get_db)):
+    # Bina login ke access block karo
+    if admin_session != "authenticated":
+        return RedirectResponse(url="/admin", status_code=303)
+    
+    # Database se saari payments nikalna
+    payments = db.query(Payment).order_by(Payment.status.desc()).all() 
+    
+    # HTML ke liye dono tables (Payment + Employee) ka data mix karna
+    dashboard_data = []
+    for p in payments:
+        emp = db.query(EmployeeDetail).filter(EmployeeDetail.user_id == p.user_id).first()
+        
+        dashboard_data.append({
+            "payment_id": p.id,
+            "id": p.id, # Fallback ID
+            "name": emp.name if emp else "Unknown Employee",
+            "pan": emp.pan if emp else "N/A",
+            "utr_number": p.upi_txn_utr,  # HTML format mapping
+            "amount": p.amount,
+            "status": p.status
+        })
+        
+    # Nayi payments sabse upar dikhane ke liye list ko reverse kar do
+    dashboard_data.reverse()
+    
+    # "users" aur "payments" dono keys bhej rahe hain taaki HTML error na de
+    return templates.TemplateResponse(
+        request=request, 
+        name="admin_dashboard.html", 
+        context={"request": request, "users": dashboard_data, "payments": dashboard_data}
+    )
+
+
+@app.get("/admin/logout")
+async def admin_logout():
+    response = RedirectResponse(url="/admin", status_code=303)
+    response.delete_cookie("admin_session")
+    return response
+
+import os
+from fastapi.responses import FileResponse
+
+@app.get("/api/download-pdf")
+async def download_form16():
+    # Abhi testing ke liye hum ek temporary file bana rahe hain
+    # (Baad me yahan tumhara pdf_generator.py actual data se PDF banayega)
+    pdf_path = "Form_16_Generated.pdf"
+    
+    # Agar file nahi hai, toh ek dummy file create kar lo test ke liye
+    if not os.path.exists(pdf_path):
+        with open(pdf_path, "wb") as f:
+            f.write(b"%PDF-1.4\n%Dummy PDF for testing\n")
+            
+    # FileResponse browser ko direct download prompt deta hai
+    return FileResponse(
+        path=pdf_path, 
+        filename="Form_16_Nitin_Mallick_FY25-26.pdf", 
+        media_type="application/pdf"
+    )
+
+@app.post("/admin/payment/approve/{payment_id}")
+def approve_payment(payment_id: str, request: Request, admin_session: str = Cookie(None), db: Session = Depends(get_db)):
+    # Security check
+    if admin_session != "authenticated":
+        return RedirectResponse(url="/admin", status_code=303)
+    
+    # Database me status update karo
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    if payment:
+        payment.status = "approved"
+        db.commit()
+    
+    return RedirectResponse(url="/admin/dashboard", status_code=303)
 
 # ==========================================
 # PHASE 4: PAYMENT & TELEGRAM APPROVAL FLOW
@@ -234,22 +343,100 @@ def send_telegram_notification(db: Session, payment_id: str, utr: str, user_id: 
     except Exception as e:
         print(f"Telegram Notification Failed: {e}")
 
+from fastapi import Request # Upar check karlena ki ye import ho
+
 @app.post("/api/payment/submit")
-def submit_utr(data: PaymentSubmitSchema, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    payment_id = str(uuid.uuid4())
-    new_payment = Payment(
-        id=payment_id,
-        user_id=data.user_id,
-        amount=data.amount,
-        upi_txn_utr=data.utr_number,
-        status="pending"
-    )
-    db.add(new_payment)
-    db.commit()
+async def submit_utr(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    data = await request.json()
     
-    # Background task triggered here
-    background_tasks.add_task(send_telegram_notification, db, payment_id, data.utr_number, data.user_id)
-    return {"message": "UTR Submitted successfully", "payment_id": payment_id}
+    user_id = data.get("user_id")
+    utr_number = data.get("utr_number")
+    amount = data.get("amount")
+    slips = data.get("slips", [])
+    
+    try:
+        # 🟢 FIX 1: Sabse pehle Base User banayein taaki Foreign Key (Integrity) Error na aaye
+        base_user = db.query(User).filter(User.id == user_id).first()
+        if not base_user:
+            base_user = User(id=user_id)
+            db.add(base_user)
+            db.flush() # Database me turant ID register karne ke liye
+            
+        payment_id = str(uuid.uuid4())
+        new_payment = Payment(
+            id=payment_id,
+            user_id=user_id,
+            amount=amount,
+            upi_txn_utr=utr_number,
+            status="pending"
+        )
+        db.add(new_payment)
+        
+        if slips:
+            main_slip = slips[0]
+            pan_no = main_slip.get("pan_no", "UNKNOWN")
+            
+            all_employers = db.query(EmployerCache).all()
+            fallback_tan = all_employers[-1].tan if all_employers else "RNCEDNK91"
+
+            user_detail = db.query(EmployeeDetail).filter(EmployeeDetail.user_id == user_id).first()
+        if not user_detail:
+            user_detail = EmployeeDetail(id=str(uuid.uuid4()), user_id=user_id)
+            db.add(user_detail)
+            
+                
+            user_detail.pan = pan_no
+            user_detail.tan_id = fallback_tan 
+            user_detail.name = main_slip.get("employee_name", "Employee")
+            
+            db.query(MonthlyLedger).filter(MonthlyLedger.user_id == user_id).delete()
+            
+            for slip in slips:
+                line_items = slip.get("line_items", {})
+                deductions = slip.get("deductions", {})
+                period = slip.get("period", {})
+                
+                month_val = 1
+                year_val = 2025
+                if "months" in period and len(period["months"]) > 0:
+                    month_val = period["months"][0][0]
+                    year_val = period["months"][0][1]
+                
+                new_ledger = MonthlyLedger(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    month=month_val,
+                    year=year_val,
+                    basic_pay=line_items.get("basic_pay", 0),
+                    da=line_items.get("da", 0),
+                    hra=line_items.get("hra", 0),
+                    gross_salary=slip.get("gross_salary", 0),
+                    deductions_json={
+                        "gpf": deductions.get("gpf", 0),
+                        "gli": deductions.get("gli", 0),
+                        "prof_tax": deductions.get("prof_tax", 0),
+                        "tds": deductions.get("tds", 0)
+                    }
+                )
+                db.add(new_ledger)
+
+        db.commit()
+        background_tasks.add_task(send_telegram_notification, db, payment_id, utr_number, user_id)
+        return {"message": "UTR Submitted successfully", "payment_id": payment_id}
+        
+    except IntegrityError as e:
+        db.rollback()
+        # 🟢 FIX 2: Ab ye jhooth nahi bolega, asali DB error screen par dikhayega!
+        error_msg = str(e.orig)
+        if "UNIQUE" in error_msg.upper() and "UTR" in error_msg.upper():
+            raise HTTPException(status_code=400, detail="Ye UTR number sach me pehle se use ho chuka hai.")
+        else:
+            # Agar error kuch aur hoga toh screen par exact beemari ka naam aayega
+            raise HTTPException(status_code=400, detail=f"Database Crash (Real Error): {error_msg}")
+            
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
 
 @app.get("/api/payment/status/{payment_id}")
 def check_payment_status(payment_id: str, db: Session = Depends(get_db)):
@@ -272,6 +459,7 @@ def admin_approve_payment(payment_id: str, db: Session = Depends(get_db)):
 # ==========================================
 # PHASE 5: FINAL PDF GENERATOR ROUTE
 # ==========================================
+
 @app.get("/api/download/form16/{payment_id}")
 def download_pdf(payment_id: str, db: Session = Depends(get_db)):
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
@@ -290,7 +478,6 @@ def download_pdf(payment_id: str, db: Session = Depends(get_db)):
     formatted_ledger = []
     total_basic = 0
     for l in ledger:
-        # Dynamic handling for JSON fields to avoid KeyErrors
         gpf_val = l.deductions_json.get("gpf", 0) if l.deductions_json else 0
         gli_val = l.deductions_json.get("gli", 0) if l.deductions_json else 0
         prof_tax_val = l.deductions_json.get("prof_tax", 0) if l.deductions_json else 0
@@ -314,11 +501,21 @@ def download_pdf(payment_id: str, db: Session = Depends(get_db)):
     if not generate_form16_pdf:
         raise HTTPException(status_code=500, detail="PDF Generator module missing. Check pdf_generator.py")
         
+    # NAYA FIX: PDF Generator ko jo details chahiye wo dynamically pass kar do
+    user.designation = getattr(user, 'designation', 'CLERK')
+    user.office_school_name = getattr(user, 'office_school_name', 'Utkramit +2 High School, Tubil')
+
     pdf_path = generate_form16_pdf(
         user_data=user, 
         ledger_data=formatted_ledger, 
-        tax_data={"total_basic": total_basic, "gross_salary": sum(l.gross_salary for l in ledger)}, 
+        tax_data={
+            "total_basic": total_basic, 
+            "gross_salary": sum(l.gross_salary for l in ledger),
+            "da_arrears": 0  # FIX: Template isko dhoondh raha tha
+        }, 
         employer_data=employer
     )
     
     return FileResponse(path=pdf_path, filename=f"Form16_{user.pan}.pdf", media_type='application/pdf')
+    
+    return FileResponse(output, filename="Form_16_Final_Design.pdf", media_type="application/pdf")
