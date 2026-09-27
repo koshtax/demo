@@ -2,7 +2,9 @@ import json
 from datetime import datetime
 from sqlalchemy import create_engine, Column, String, Float, Integer, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
-
+SQLALCHEMY_DATABASE_URL = "sqlite:///./form16_database.db"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker( autocommit=False, autoflush=False, bind=engine) 
 Base = declarative_base()
 
 class User(Base):
