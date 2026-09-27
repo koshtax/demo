@@ -63,21 +63,21 @@ class PaymentSubmitSchema(BaseModel):
     utr_number: str
     amount: float
 
-
 # ==========================================
 # PHASE 2: UI RENDERING ROUTES (HTML PAGES)
 # ==========================================
 @app.get("/")
 def read_root(request: Request):
-    return templates.TemplateResponse("upload.html", {"request": request})
+    # Updated syntax for newer FastAPI versions
+    return templates.TemplateResponse(request=request, name="upload.html")
 
 @app.get("/review")
 def review_page(request: Request):
-    return templates.TemplateResponse("review.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="review.html")
 
 @app.get("/ddo-details")
 def ddo_details_page(request: Request):
-    return templates.TemplateResponse("ddo_details.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="ddo_details.html")
 
 @app.get("/payment")
 def payment_page(request: Request, db: Session = Depends(get_db)):
@@ -86,13 +86,14 @@ def payment_page(request: Request, db: Session = Depends(get_db)):
     upi_id = settings.upi_id if settings else "admin@ybl"
     fee_amount = settings.fee_amount if settings else 150.0
     
-    return templates.TemplateResponse("payment.html", {
-        "request": request,
-        "upi_id": upi_id,
-        "fee_amount": fee_amount
-    })
-
-
+    return templates.TemplateResponse(
+        request=request, 
+        name="payment.html", 
+        context={
+            "upi_id": upi_id,
+            "fee_amount": fee_amount
+        }
+    )
 # ==========================================
 # PHASE 3: CORE DATABASE API (TAN & LEDGER)
 # ==========================================
