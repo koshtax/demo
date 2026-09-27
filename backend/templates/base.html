@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form 16 Generator | Prashasan Teal</title>
+    <!-- Tailwind CSS (No installation required) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom Fonts for UI & Financial Data -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        prashasan: {
+                            light: '#F0FDFA',
+                            base: '#0F766E',
+                            hover: '#0D9488',
+                            dark: '#115E59'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-800">
+
+    <!-- Top Navigation Bar -->
+    <nav class="bg-prashasan-base text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-3">
+                    <!-- Icon -->
+                    <svg class="w-8 h-8 text-prashasan-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    <span class="font-semibold text-xl tracking-wide">Form 16 Auto-Generator</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Progress Stepper -->
+    <div class="max-w-4xl mx-auto mt-8 px-4">
+        <div class="flex items-center justify-between relative">
+            <div class="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-slate-200 -z-10"></div>
+            
+            <!-- Step 1: Active -->
+            <div class="flex flex-col items-center bg-slate-50 px-2">
+                <div class="w-8 h-8 rounded-full bg-prashasan-base text-white flex items-center justify-center font-bold shadow">1</div>
+                <span class="text-sm mt-2 font-medium text-prashasan-base">Upload Slip</span>
+            </div>
+            <!-- Step 2: Pending -->
+            <div class="flex flex-col items-center bg-slate-50 px-2">
+                <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center font-bold">2</div>
+                <span class="text-sm mt-2 font-medium text-slate-500">Extract & Review</span>
+            </div>
+            <!-- Step 3: Pending -->
+            <div class="flex flex-col items-center bg-slate-50 px-2">
+                <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center font-bold">3</div>
+                <span class="text-sm mt-2 font-medium text-slate-500">DDO Details</span>
+            </div>
+            <!-- Step 4: Pending -->
+            <div class="flex flex-col items-center bg-slate-50 px-2">
+                <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center font-bold">4</div>
+                <span class="text-sm mt-2 font-medium text-slate-500">Payment</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Injection -->
+    <main class="max-w-4xl mx-auto mt-10 px-4 pb-12">
+        {% block content %}{% endblock %}
+    </main>
+
+</body>
+</html>
