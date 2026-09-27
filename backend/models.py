@@ -84,7 +84,7 @@ class Payment(Base):
     upi_txn_utr = Column(String, unique=True)
     status = Column(String, default="pending") # pending -> approved -> rejected[span_6](start_span)[span_6](end_span)
     approved_at = Column(DateTime, nullable=True)
-
+Base.metadata.create_all(bind=engine)
 # ==========================================
 # 3. LIVE TESTING BLOCK (Self-Auditing)
 # ==========================================
