@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+</head>
+<body>
+
+    <!-- PAGE 1: Schedule of Income - Tax (Portrait) -->
+    <div class="portrait-section">
+        <h3 class="text-center">नई कर व्यवस्था के तहत<br>Schedule of Income - Tax<br>आयकर की अनुसूची</h3>
+        <p class="text-center">वित्तीय वर्ष {{ financial_year }} (कर निर्धारण वर्ष {{ assessment_year }})</p>
+        
+        <table class="no-border">
+            <tr>
+                <td class="no-border" width="20%">करदाता का नाम</td>
+                <td class="no-border bold">: {{ employee.name }}</td>
+            </tr>
+            <tr>
+                <td class="no-border">पदनाम</td>
+                <td class="no-border bold">: {{ employee.designation }}</td>
+            </tr>
+            <tr>
+                <td class="no-border">कार्यालय/विद्यालय का नाम</td>
+                <td class="no-border bold">: {{ employee.school }}</td>
+            </tr>
+            <tr>
+                <td class="no-border">स्थायी लेखा संख्या</td>
+                <td class="no-border bold">: {{ employee.pan }}</td>
+            </tr>
+        </table>
+
+        <!-- Income Summary Table -->
+        <table>
+            <tr><th colspan="2" style="text-align: left;">क. वेतन स्रोत से आय का विवरण:</th><th>राशि</th></tr>
+            <tr>
+                <td>01.</td><td>वेतन (दिनांक 01.03.2025 से 29.02.2026 तक)</td><td class="text-right">{{ tax.total_basic }}</td>
+            </tr>
+            <tr>
+                <td>02.</td><td>महँगाई भत्ता</td><td class="text-right">{{ tax.total_da }}</td>
+            </tr>
+            <tr>
+                <td>03.</td><td>मकान किराया भत्ता</td><td class="text-right">{{ tax.total_hra }}</td>
+            </tr>
+            <tr>
+                <td>04.</td><td>चिकित्सा भत्ता</td><td class="text-right">{{ tax.total_medical }}</td>
+            </tr>
+            <tr>
+                <td>09.</td><td>बकाया वेतन एवं भत्ते की राशि</td><td class="text-right">{{ tax.total_arrears }}</td>
+            </tr>
+            <tr>
+                <td>10.</td><td class="bold">वेतन स्रोत से प्राप्त कुल आय</td><td class="text-right bold">{{ tax.gross_salary }}</td>
+            </tr>
+        </table>
+        
+        <!-- Add Tax Calculation Table here... -->
+    </div>
+
+    <!-- PAGE 2: Form 16 Part A (Portrait) -->
+    <div class="page-break portrait-section">
+        <h3 class="text-center">FORM NO.16<br>PART A</h3>
+        <p class="text-center">Certificate under Section 203 of the Income-Tax Act, 1961...</p>
+        
+        <table>
+            <tr>
+                <td><b>Name and address of the Employer</b><br>{{ employer.name }}<br>{{ employer.address }}</td>
+                <td><b>Name and address of the Employee</b><br>{{ employee.name }}<br>{{ employee.school }}</td>
+            </tr>
+            <tr>
+                <td><b>PAN of the Deductor:</b> {{ employer.pan }}<br><b>TAN of the Deductor:</b> {{ employer.tan }}</td>
+                <td><b>PAN of the Employee:</b> {{ employee.pan }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- PAGE 3: Form 16 Part B (Portrait) -->
+    <div class="page-break portrait-section">
+        <h3 class="text-center">PART B (Annexure)</h3>
+        <p class="text-center">DETAILS OF SALARY PAID AND ANY OTHER INCOME AND TAX DEDUCTION</p>
+        <!-- Add Part B dynamic tables here... -->
+    </div>
+
+    <!-- PAGE 4: Monthly Salary Ledger (Landscape) -->
+    <!-- The class "landscape-section" flips just this page to A4 Landscape -->
+    <div class="page-break landscape-section">
+        <h4 class="text-center">वित्तीय वर्ष {{ financial_year }} में वेतन स्रोत से आय और कटौतियों की विवरणी</h4>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>माह</th>
+                    <th>वेतन</th>
+                    <th>महंगाई भत्ता</th>
+                    <th>मकान किराया भत्ता</th>
+                    <th>चिकित्सा भत्ता</th>
+                    <th>सकल वेतन</th>
+                    <th>भविष्य निधि में</th>
+                    <th>GLI</th>
+                    <th>Prof Tax</th>
+                    <th>कुल कटौती</th>
+                    <th>आयकर (TDS)</th>
+                    <th>शुद्ध देय वेतन</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Loop through the 12 months data dynamically -->
+                {% for row in ledger %}
+                <tr>
+                    <td>{{ row.month_name }}</td>
+                    <td class="text-right">{{ row.basic }}</td>
+                    <td class="text-right">{{ row.da }}</td>
+                    <td class="text-right">{{ row.hra }}</td>
+                    <td class="text-right">{{ row.medical }}</td>
+                    <td class="text-right bold">{{ row.gross }}</td>
+                    <td class="text-right">{{ row.gpf }}</td>
+                    <td class="text-right">{{ row.gli }}</td>
+                    <td class="text-right">{{ row.prof_tax }}</td>
+                    <td class="text-right">{{ row.total_deduction }}</td>
+                    <td class="text-right">{{ row.tds }}</td>
+                    <td class="text-right bold">{{ row.net_pay }}</td>
+                </tr>
+                {% endfor %}
+                
+                <!-- Totals Row -->
+                <tr>
+                    <td class="bold">योग</td>
+                    <td class="text-right bold">{{ tax.total_basic }}</td>
+                    <td class="text-right bold">{{ tax.total_da }}</td>
+                    <!-- Add other totals... -->
+                </tr>
+            </tbody>
+        </table>
+        
+        <div style="margin-top: 30px; display: flex; justify-content: space-between;">
+            <div>नाम : {{ employee.name }}</div>
+            <div>हस्ताक्षर .........................</div>
+        </div>
+    </div>
+
+</body>
+</html>
