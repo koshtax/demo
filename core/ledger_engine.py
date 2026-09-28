@@ -185,8 +185,15 @@ if december is None:
     if flags:
         jan_ledger["flags"] = flags
 
-    component_sum = sum(v for k, v in jan_ledger.items() if k not in STRUCTURAL_KEYS)
-    jan_ledger["gross_salary"] = round(jan_basic + component_sum, 2)
+    component_sum = sum(
+    float(v)
+    for k, v in jan_ledger.items()
+    if k not in STRUCTURAL_KEYS
+    and isinstance(v, (int, float))
+    and not isinstance(v, bool)
+    )
+
+jan_ledger["gross_salary"] = round(float(jan_basic) + component_sum, 2)
     return jan_ledger
 
 
