@@ -225,6 +225,12 @@ class LedgerSchema(BaseModel):
 class FinancialYearSchema(BaseModel):
     financial_year: str
 
+class EmployeeDetailSchema(BaseModel):
+    user_id: str
+    name: str
+    pan: str
+    office_school_name: Optional[str] = None
+    tan_id: Optional[str] = None
 
 # =========================================================
 # HTML PAGES
@@ -307,6 +313,122 @@ def payment_page(
         },
     )
 
+# =========================================================
+# EMPLOYEE DETAILS
+# =========================================================
+
+@app.post("/api/employee")
+def save_employee_details(
+    data: EmployeeDetailSchema,
+    db: Session = Depends(get_db),
+):
+    user_id = data.user_id.strip()
+    name = data.name.strip()
+    pan = data.pan.strip().upper()
+
+    tan_id = (
+        data.tan_id.strip().upper()
+        if data.tan_id
+        else None
+    )
+
+    office_school_name = (
+        data.office_school_name.strip()
+        if data.office_school_name
+        else None
+    )
+
+    if not user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="User ID is required.",
+        )
+
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Employee name is required.",
+        )
+
+    if not pan:
+        raise HTTPException(
+            status_code=400,
+            detail="Employee PAN is required.",
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        user = User(id=user_id)
+        db.add(user)
+        db.flush()
+
+    if tan_id:
+        employer = (
+            db.query(EmployerCache)
+            .filter(EmployerCache.tan == tan_id)
+            .first()
+        )
+
+        if not employer:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Employer TAN must be saved "
+                    "before linking employee details."
+                ),
+            )
+
+    employee = (
+        db.query(EmployeeDetail)
+        .filter(EmployeeDetail.user_id == user_id)
+        .first()
+    )
+
+    if employee:
+        employee.name = name
+        employee.pan = pan
+        employee.office_school_name = office_school_name
+
+        if tan_id:
+            employee.tan_id = tan_id
+
+    else:
+        employee = EmployeeDetail(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            name=name,
+            pan=pan,
+            office_school_name=office_school_name,
+            tan_id=tan_id,
+        )
+
+        db.add(employee)
+
+    try:
+        db.commit()
+        db.refresh(employee)
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Employee details could not be saved.",
+        )
+
+    return {
+        "message": "Employee details saved successfully.",
+        "user_id": employee.user_id,
+        "name": employee.name,
+        "pan": employee.pan,
+        "office_school_name": employee.office_school_name,
+        "tan_id": employee.tan_id,
+    }
 
 # =========================================================
 # EMPLOYER / TAN CACHE
