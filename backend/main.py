@@ -381,8 +381,8 @@ async def submit_utr(request: Request, background_tasks: BackgroundTasks, db: Se
 
             user_detail = db.query(EmployeeDetail).filter(EmployeeDetail.user_id == user_id).first()
             if not user_detail:
-            user_detail = EmployeeDetail(id=str(uuid.uuid4()), user_id=user_id)
-            db.add(user_detail)
+                user_detail = EmployeeDetail(id=str(uuid.uuid4()), user_id=user_id)
+                db.add(user_detail)
             
                 
             user_detail.pan = pan_no
