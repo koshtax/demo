@@ -473,49 +473,138 @@ def download_pdf(payment_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Incomplete user or employer details.")
         
     employer = db.query(EmployerCache).filter(EmployerCache.tan == user.tan_id).first()
-    
-    # Extracting exact data for WeasyPrint
+
+    # 🟢 Asali calculations + SMART AUTO-FILL (Increment Logic)
     formatted_ledger = []
-    total_basic = 0
-    for l in ledger:
-        gpf_val = l.deductions_json.get("gpf", 0) if l.deductions_json else 0
-        gli_val = l.deductions_json.get("gli", 0) if l.deductions_json else 0
-        prof_tax_val = l.deductions_json.get("prof_tax", 0) if l.deductions_json else 0
-        tds_val = l.deductions_json.get("tds", 0) if l.deductions_json else 0
-        
+    total_basic = total_da = total_hra = gross_salary = 0
+    total_gpf = total_gli = total_tds = total_prof_tax = 0
+
+    month_dict = {
+        1: "January", 2: "February", 3: "March", 4: "April", 
+        5: "May", 6: "June", 7: "July", 8: "August", 
+        9: "September", 10: "October", 11: "November", 12: "December"
+    }
+
+    fy_months = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2]
+    ledger_dict = {l.month: l for l in ledger}
+    
+    # 🔥 FIX: June aur July ka Basic compare karo
+    june_basic = ledger_dict[6].basic_pay if 6 in ledger_dict else 0
+    july_basic = ledger_dict[7].basic_pay if 7 in ledger_dict else 0
+    
+    # Agar June aur July barabar hain, toh Jan me increment pakka hai
+    apply_jan_increment = False
+    if june_basic > 0 and july_basic > 0 and june_basic == july_basic:
+        apply_jan_increment = True
+
+    last_known = {"basic": 0, "da": 0, "hra": 0, "gpf": 0, "gli": 0, "prof_tax": 0, "tds": 0}
+
+    for m in fy_months:
+        if m in ledger_dict:
+            # Data pehle se database me hai
+            l = ledger_dict[m]
+            basic = l.basic_pay
+            da = l.da
+            hra = l.hra
+            gross = l.gross_salary
+            
+            gpf_val = l.deductions_json.get("gpf", 0) if l.deductions_json else 0
+            gli_val = l.deductions_json.get("gli", 0) if l.deductions_json else 0
+            prof_tax_val = l.deductions_json.get("prof_tax", 0) if l.deductions_json else 0
+            tds_val = l.deductions_json.get("tds", 0) if l.deductions_json else 0
+            
+            last_known.update({
+                "basic": basic, "da": da, "hra": hra, 
+                "gpf": gpf_val, "gli": gli_val, "prof_tax": prof_tax_val, "tds": tds_val
+            })
+            month_label = month_dict[m]
+            
+        else:
+            # 🟢 AUTO-FILL LOGIC with Increment
+            if last_known["basic"] == 0:
+                continue 
+                
+            # Agar January (1) hai aur increment lagna hai
+            if m == 1 and apply_jan_increment:
+                # 3% increment rule, rounded to nearest 100
+                new_basic = round((last_known["basic"] * 1.03) / 100) * 100
+                
+                # Naye basic par purana DA percentage lagao
+                da_percent = last_known["da"] / last_known["basic"] if last_known["basic"] > 0 else 0
+                new_da = round(new_basic * da_percent)
+                
+                last_known["basic"] = new_basic
+                last_known["da"] = new_da
+                
+            basic = last_known["basic"]
+            da = last_known["da"]
+            hra = last_known["hra"]
+            gpf_val = last_known["gpf"]
+            gli_val = last_known["gli"]
+            prof_tax_val = last_known["prof_tax"]
+            tds_val = last_known["tds"]
+            gross = basic + da + hra
+            
+            month_label = f"{month_dict[m]} (Auto)"
+
+        # Data PDF ke liye format karna
         formatted_ledger.append({
-            "month_name": l.month,
-            "basic": l.basic_pay,
-            "da": l.da,
-            "hra": l.hra,
-            "gross": l.gross_salary,
-            "gpf": gpf_val,
-            "gli": gli_val,
-            "prof_tax": prof_tax_val,
-            "tds": tds_val,
-            "total_deduction": gpf_val + gli_val + prof_tax_val + tds_val,
-            "net_pay": l.gross_salary - (gpf_val + gli_val + prof_tax_val + tds_val)
+            "month_name": month_label, 
+            "basic": f"{basic:.2f}", "da": f"{da:.2f}", "hra": f"{hra:.2f}",
+            "gross": f"{gross:.2f}", "gpf": f"{gpf_val:.2f}", "gli": f"{gli_val:.2f}",
+            "prof_tax": f"{prof_tax_val:.2f}", "tds": f"{tds_val:.2f}",
+            "total_deduction": f"{(gpf_val + gli_val + prof_tax_val + tds_val):.2f}",
+            "net_pay": f"{(gross - (gpf_val + gli_val + prof_tax_val + tds_val)):.2f}"
         })
-        total_basic += l.basic_pay
         
+        # Totals update karna
+        total_basic += basic
+        total_da += da
+        total_hra += hra
+        gross_salary += gross
+        total_gpf += gpf_val
+        total_gli += gli_val
+        total_tds += tds_val
+        total_prof_tax += prof_tax_val
+
     if not generate_form16_pdf:
         raise HTTPException(status_code=500, detail="PDF Generator module missing. Check pdf_generator.py")
         
-    # NAYA FIX: PDF Generator ko jo details chahiye wo dynamically pass kar do
     user.designation = getattr(user, 'designation', 'CLERK')
     user.office_school_name = getattr(user, 'office_school_name', 'Utkramit +2 High School, Tubil')
+
+    # 🟢 Saara data ek bundle me pack karo
+    tax_data_bundle = {
+        "salary_amount": f"{total_basic:.2f}",
+        "da_amount": f"{total_da:.2f}",
+        "hra_amount": f"{total_hra:.2f}",
+        "gross_total_income": f"{gross_salary:.2f}",
+        "taxable_income": f"{(gross_salary - 75000):.2f}",
+        "standard_deduction": "75000.00",
+        
+        "q1_tds": f"{total_tds:.2f}",
+        "total_tds": f"{total_tds:.2f}",
+        "challan_tax": f"{total_tds:.2f}",
+        "tds_paid": f"{total_tds:.2f}",
+        
+        "total_gpf": f"{total_gpf:.2f}",
+        "total_gis": f"{total_gli:.2f}",
+        "total_80c": f"{(total_gpf + total_gli):.2f}",
+        "total_80c_deductible": f"{(total_gpf + total_gli):.2f}",
+        
+        "total_prof_tax": f"{total_prof_tax:.2f}",
+        "total_deductions_sum": f"{(total_gpf + total_gli + total_tds + total_prof_tax):.2f}",
+        "net_pay_sum": f"{(gross_salary - (total_gpf + total_gli + total_tds + total_prof_tax)):.2f}",
+        "da_arrears": 0
+    }
 
     pdf_path = generate_form16_pdf(
         user_data=user, 
         ledger_data=formatted_ledger, 
-        tax_data={
-            "total_basic": total_basic, 
-            "gross_salary": sum(l.gross_salary for l in ledger),
-            "da_arrears": 0  # FIX: Template isko dhoondh raha tha
-        }, 
+        tax_data=tax_data_bundle, 
         employer_data=employer
     )
     
     return FileResponse(path=pdf_path, filename=f"Form16_{user.pan}.pdf", media_type='application/pdf')
-    
+
     return FileResponse(output, filename="Form_16_Final_Design.pdf", media_type="application/pdf")
