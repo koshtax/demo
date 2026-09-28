@@ -417,6 +417,12 @@ def parse_slip_block(block: str) -> dict:
         "ddo_code": extract_between(r"DDO CODE", [r"\n"], block),
         "bill_no": extract_between(r"Bill No\.?", [r"DDO CODE"], block),
         "period": period_info,
+        "month_year": (
+            period_info["primary_month_year"]
+            if not period_info["is_combined"]
+            else None
+        ),
+
         "line_items": {},
         "deductions": {},
         "warnings": [],
@@ -452,7 +458,14 @@ def parse_slip_block(block: str) -> dict:
 
     net_match = re.search(r"Net Pay[:\s]*([\d,]+(?:\.\d+)?)", block, re.IGNORECASE)
     result["net_pay"] = float(net_match.group(1).replace(",", "")) if net_match else None
+    if period_info.get("parse_error"):
 
+    result["warnings"].append(
+        f"Could not safely parse salary period "
+        f"'{period_info.get('raw')}': "
+        f"{period_info['parse_error']} "
+        f"Manual review required."
+    )
     if period_info.get("is_arrear"):
         result["source"] = "arrear"
     elif period_info["is_combined"]:
