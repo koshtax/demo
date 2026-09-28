@@ -97,70 +97,86 @@ def parse_financial_year(financial_year: str):
         )
 
     return start_year, end_year
-
 def generate_january_ledger(
     history: list,
     matrix: dict,
     financial_year: str
 ) -> dict:
     """
-    history: chronological list of monthly ledger dicts for Mar..Dec of the
-    cycle so far. Each is a flat dict: {month, year, basic_pay, source,
-    <allowance fields...>}. The last entry must be December.
-    Returns the auto-generated January ledger dict.
+    Generate January projection for the admin-selected March-February cycle.
+
+    Example:
+        financial_year = "2026-27"
+        cycle = March 2026 ... February 2027
+        projected January = January 2027
+
+    Actual January salary data should override this projected entry later.
     """
     start_year, end_year = parse_financial_year(financial_year)
 
-december = next(
-    (
-        m for m in reversed(history)
-        if m.get("month") == 12
-        and m.get("year") == start_year
-        and not is_combined_bill(m)
-    ),
-    None,
-)
-
-june = next(
-    (
-        m for m in reversed(history)
-        if m.get("month") == 6
-        and m.get("year") == start_year
-        and not is_combined_bill(m)
-    ),
-    None,
-)
-
-july = next(
-    (
-        m for m in reversed(history)
-        if m.get("month") == 7
-        and m.get("year") == start_year
-        and not is_combined_bill(m)
-    ),
-    None,
-)
-
-if december is None:
-    raise ValueError(
-        f"Clean December salary entry not found for FY {financial_year}."
+    december = next(
+        (
+            m for m in reversed(history)
+            if m.get("month") == 12
+            and m.get("year") == start_year
+            and not is_combined_bill(m)
+        ),
+        None,
     )
 
+    june = next(
+        (
+            m for m in reversed(history)
+            if m.get("month") == 6
+            and m.get("year") == start_year
+            and not is_combined_bill(m)
+        ),
+        None,
+    )
+
+    july = next(
+        (
+            m for m in reversed(history)
+            if m.get("month") == 7
+            and m.get("year") == start_year
+            and not is_combined_bill(m)
+        ),
+        None,
+    )
+
+    if december is None:
+        raise ValueError(
+            f"Clean December salary entry not found for FY {financial_year}."
+        )
+
     notes = []
+
     if is_combined_bill(june) or is_combined_bill(july):
         jan_basic = december["basic_pay"]
-        notes.append("June/July unavailable or a combined-period bill; increment check skipped.")
+        notes.append(
+            "June/July unavailable or a combined-period bill; "
+            "increment check skipped."
+        )
     else:
         level, _ = find_level_and_cell(december["basic_pay"], matrix)
+
         if level is None:
             jan_basic = december["basic_pay"]
-            notes.append("December's basic pay doesn't match any pay-matrix cell exactly; increment skipped — needs manual review.")
+            notes.append(
+                "December's basic pay doesn't match any pay-matrix cell "
+                "exactly; increment skipped — needs manual review."
+            )
         elif june["basic_pay"] == july["basic_pay"]:
-            jan_basic = next_cell(level, december["basic_pay"], matrix)  # no increment had landed -> apply it now
+            jan_basic = next_cell(
+                level,
+                december["basic_pay"],
+                matrix
+            )
         else:
-            jan_basic = december["basic_pay"]  # increment already happened somewhere this cycle -> don't double it
+            jan_basic = december["basic_pay"]
 
     classifications = classify_all_fields(history)
+
     jan_ledger = {
         "month": 1,
         "year": end_year,
@@ -171,33 +187,52 @@ if december is None:
         "is_auto_generated": True,
     }
 
-    flags = ["AUTO_GENERATED_JANUARY: Actual January salary slip should override this projected entry."]
+    flags = [
+        "AUTO_GENERATED_JANUARY: Actual January salary slip "
+        "should override this projected entry."
+    ]
+
     for field, pattern in classifications.items():
-        projected = project_field_forward(field, pattern, december, jan_basic)
+        projected = project_field_forward(
+            field,
+            pattern,
+            december,
+            jan_basic
+        )
+
         if projected is None:
             jan_ledger[field] = december.get(field)
-            flags.append(f"'{field}': pattern={pattern} — carried forward unchanged, needs manual review.")
+            flags.append(
+                f"'{field}': pattern={pattern} — carried forward unchanged, "
+                "needs manual review."
+            )
         else:
             jan_ledger[field] = projected
 
     if notes:
-          jan_ledger["note"] = "AUTO-GENERATED JANUARY PROJECTION. " + " ".join(notes)
+        jan_ledger["note"] = (
+            "AUTO-GENERATED JANUARY PROJECTION. "
+            + " ".join(notes)
+        )
     else:
-          jan_ledger["note"] = "AUTO-GENERATED JANUARY PROJECTION."
-    if flags:
-        jan_ledger["flags"] = flags
+        jan_ledger["note"] = "AUTO-GENERATED JANUARY PROJECTION."
+
+    jan_ledger["flags"] = flags
 
     component_sum = sum(
-    float(v)
-    for k, v in jan_ledger.items()
-    if k not in STRUCTURAL_KEYS
-    and isinstance(v, (int, float))
-    and not isinstance(v, bool)
+        float(v)
+        for k, v in jan_ledger.items()
+        if k not in STRUCTURAL_KEYS
+        and isinstance(v, (int, float))
+        and not isinstance(v, bool)
     )
 
-jan_ledger["gross_salary"] = round(float(jan_basic) + component_sum, 2)
-    return jan_ledger
+    jan_ledger["gross_salary"] = round(
+        float(jan_basic) + component_sum,
+        2
+    )
 
+    return jan_ledger
 
 def compute_february_tds(cycle_months_mar_to_jan: list, feb_projected_gross: float) -> dict:
     """
@@ -280,8 +315,11 @@ if __name__ == "__main__":
     level, cell = find_level_and_cell(49000, matrix)
     print(f"December's basic 49000 -> matrix Level {level}, Cell {cell}")
 
-    jan_auto = generate_january_ledger(vivek_history, matrix)
-    print("\nAuto-generated January (Vivek):")
+    jan_auto = generate_january_ledger(
+      vivek_history,
+      matrix,
+      "2025-26"
+    )
     print(jan_auto)
 
     actual_jan = {"basic_pay": 50500, "da": 29290, "hra": 5050, "medical": 500}
@@ -299,7 +337,11 @@ if __name__ == "__main__":
         {"month": 11, "year": 2025, "basic_pay": 19900, "da": 11542, "hra": 1990, "medical": 500, "source": "extracted"},
         {"month": 12, "year": 2025, "basic_pay": 19900, "da": 11542, "hra": 1990, "medical": 500, "source": "extracted"},
     ]
-    jan_jaya = generate_january_ledger(jaya_history, matrix)
+    jan_jaya = generate_january_ledger(
+      jaya_history,
+      matrix,
+      "2025-26"
+    )
     print("\n\nAuto-generated January (Jaya, combined-bill case):")
     print(jan_jaya)
 
