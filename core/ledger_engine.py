@@ -220,6 +220,8 @@ def compute_february_tds(cycle_months_mar_to_jan: list, feb_projected_gross: flo
       )
 
     feb_projected_gross = round(float(feb_projected_gross or 0), 2)
+    if feb_projected_gross < 0:
+      raise ValueError("February projected gross cannot be negative.")
     total_cycle_gross = round(gross_so_far + feb_projected_gross, 2)
 
     tax_breakdown = compute_annual_tax(total_cycle_gross)
@@ -230,16 +232,25 @@ def compute_february_tds(cycle_months_mar_to_jan: list, feb_projected_gross: flo
         2,
     )
     remaining_tax_due = round(max(0.0, total_tax_due - tds_already_cut), 2)
+    excess_tds = round(max(0.0, tds_already_cut - total_tax_due), 2)
     feb_deduction = round(min(feb_projected_gross, remaining_tax_due), 2)
     remaining_tax_payable = round(max(0.0, remaining_tax_due - feb_deduction), 2)
+    if remaining_tax_payable > 0:
+      tax_message = f"Additional tax payable: ₹{remaining_tax_payable:.2f}"
+    elif excess_tds > 0:
+      tax_message = f"Excess TDS already deducted: ₹{excess_tds:.2f}"
+    else:
+      tax_message = "No additional tax payable."
 
     return {
         "total_cycle_gross": total_cycle_gross,
         "tax_breakdown": tax_breakdown,
         "tds_already_cut": tds_already_cut,
+        "excess_tds": excess_tds,
         "feb_tds_deduction": feb_deduction,
         "remaining_tax_payable": remaining_tax_payable,
         "tax_shortfall": remaining_tax_payable > 0,
+        "tax_message": tax_message,
         "feb_net_payable": round(feb_projected_gross - feb_deduction, 2),
     }
 
