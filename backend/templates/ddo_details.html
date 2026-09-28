@@ -108,52 +108,166 @@
     });
 
     // Handle form submission, save to database, and redirect to payment
+    <script>
     async function proceedToPayment(event) {
-        if(event) event.preventDefault();
+        if (event) {
+            event.preventDefault();
+        }
 
-        // 1. Form se data uthao
-        const tan = document.getElementById("tan_number").value.trim();
-        const officer_name = document.getElementById("officer_name").value.trim();
-        const officer_father_name = document.getElementById("officer_father_name").value.trim();
-        const employer_name = document.getElementById("employer_name").value.trim();
-        const designation = document.getElementById("designation").value.trim();
-        const employer_address = document.getElementById("employer_address").value.trim();
-        const employer_pan = document.getElementById("employer_pan").value.trim();
+        const userId = "{{ user_id }}";
 
-        // TAN zaroori hai
+        const tan = document
+            .getElementById("tan_number")
+            .value
+            .trim()
+            .toUpperCase();
+
+        const officerName = document
+            .getElementById("officer_name")
+            .value
+            .trim();
+
+        const officerFatherName = document
+            .getElementById("officer_father_name")
+            .value
+            .trim();
+
+        const employerName = document
+            .getElementById("employer_name")
+            .value
+            .trim();
+
+        const designation = document
+            .getElementById("designation")
+            .value
+            .trim();
+
+        const employerAddress = document
+            .getElementById("employer_address")
+            .value
+            .trim();
+
+        const employerPan = document
+            .getElementById("employer_pan")
+            .value
+            .trim()
+            .toUpperCase();
+
+        if (!userId) {
+            alert(
+                "User ID is missing. Please start again from upload."
+            );
+            return;
+        }
+
         if (!tan) {
             alert("Please enter the DDO TAN Number.");
             return;
         }
 
-        // 2. Data ko API bhejne ke liye pack karo
-        const payload = {
+        if (
+            !officerName ||
+            !employerName ||
+            !designation ||
+            !employerAddress
+        ) {
+            alert(
+                "Please complete the required DDO details."
+            );
+            return;
+        }
+
+        const employerPayload = {
             tan: tan,
-            officer_name: officer_name,
-            officer_father_name: officer_father_name,
-            employer_name: employer_name,
+            officer_name: officerName,
+            officer_father_name: officerFatherName,
+            employer_name: employerName,
             designation: designation,
-            employer_address: employer_address,
-            pan: employer_pan
+            employer_address: employerAddress,
+            pan: employerPan
         };
 
         try {
-            // 3. Backend API ko data bhejo taaki database me hamesha ke liye save ho jaye
-            await fetch("/api/employer", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(payload)
-            });
-            
-            // 4. Data save hone ke baad safely asali ID lekar Payment page par jao!
-            window.location.href = `/payment?user_id={{ user_id }}`;
-            
+            // 1. Save/update DDO first.
+            const employerResponse = await fetch(
+                "/api/employer",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(employerPayload)
+                }
+            );
+
+            const employerResult =
+                await employerResponse.json();
+
+            if (!employerResponse.ok) {
+                throw new Error(
+                    employerResult.detail ||
+                    "DDO details could not be saved."
+                );
+            }
+
+            // 2. Get employee already saved on Review page.
+            const employeeResponse = await fetch(
+                `/api/employee/${encodeURIComponent(userId)}`
+            );
+
+            const employee =
+                await employeeResponse.json();
+
+            if (!employeeResponse.ok) {
+                throw new Error(
+                    employee.detail ||
+                    "Employee details were not found."
+                );
+            }
+
+            // 3. Save same employee again with TAN attached.
+            const linkResponse = await fetch(
+                "/api/employee",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        name: employee.name,
+                        pan: employee.pan,
+                        office_school_name:
+                            employee.office_school_name,
+                        tan_id: tan
+                    })
+                }
+            );
+
+            const linkResult =
+                await linkResponse.json();
+
+            if (!linkResponse.ok) {
+                throw new Error(
+                    linkResult.detail ||
+                    "Employee could not be linked to DDO."
+                );
+            }
+
+            // 4. Only continue after both records are saved.
+            window.location.href =
+                `/payment?user_id=${encodeURIComponent(userId)}`;
+
         } catch (error) {
-            console.error("Error saving DDO details:", error);
-            // Backup redirect agar network issue aaya
-            window.location.href = `/payment?user_id={{ user_id }}`;
+            console.error(
+                "DDO/employee save failed:",
+                error
+            );
+
+            alert(
+                "Details could not be saved: " +
+                error.message
+            );
         }
     }
 </script>
