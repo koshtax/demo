@@ -163,7 +163,7 @@ if december is None:
     classifications = classify_all_fields(history)
     jan_ledger = {
         "month": 1,
-        "year": december["year"] + 1,
+        "year": end_year,
         "basic_pay": jan_basic,
         "source": "auto_generated",
         "is_auto_generated": True,
