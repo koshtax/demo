@@ -209,24 +209,87 @@
         });
     });
 
-    // Validation & Routing for the next step
-// Validation & Routing for the next step
-    function proceedToNextStep() {
+        // Validation, employee save & routing
+    async function proceedToNextStep() {
         const office = document.getElementById('emp_office').value.trim();
         const mobile = document.getElementById('emp_mobile').value.trim();
         const email = document.getElementById('emp_email').value.trim();
 
+        const name = document.getElementById('emp_name').value.trim();
+        const pan = document.getElementById('emp_pan_input').value.trim();
+
+        const userId = "{{ user_id }}";
+
         if (!office || !mobile || !email) {
-            alert("Please fill in the required fields: Office Address, Mobile Number, and Email ID.");
-            return; // Form khali hone par code yahan ruk jayega
+            alert(
+                "Please fill in the required fields: " +
+                "Office Address, Mobile Number, and Email ID."
+            );
+            return;
         }
 
-        // Save manually entered data so we can use it during final PDF generation
-        const manualDetails = { office, mobile, email };
-        sessionStorage.setItem('manualPersonalDetails', JSON.stringify(manualDetails));
+        if (!name || name === "N/A" || !pan || pan === "N/A") {
+            alert(
+                "Employee Name or PAN could not be extracted. " +
+                "Please upload a valid salary slip."
+            );
+            return;
+        }
 
-        // REDIRECT YAHAN AAYEGA (Sab kuch theek hone ke baad)
-        window.location.href = `/ddo-details?user_id={{ user_id }}`;
+        if (!userId) {
+            alert("User ID is missing. Please upload the salary slip again.");
+            return;
+        }
+
+        const manualDetails = {
+            office,
+            mobile,
+            email
+        };
+
+        sessionStorage.setItem(
+            'manualPersonalDetails',
+            JSON.stringify(manualDetails)
+        );
+
+        try {
+            const response = await fetch('/api/employee', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: userId,
+                    name: name,
+                    pan: pan,
+                    office_school_name: office,
+                    tan_id: null
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    result.detail ||
+                    "Employee details could not be saved."
+                );
+            }
+
+            window.location.href =
+                `/ddo-details?user_id=${encodeURIComponent(userId)}`;
+
+        } catch (error) {
+            console.error(
+                "Employee details save failed:",
+                error
+            );
+
+            alert(
+                "Employee details could not be saved: " +
+                error.message
+            );
+        }
     }
 </script>
 {% endblock %}
