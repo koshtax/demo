@@ -117,13 +117,6 @@ def create_missing_tables(cursor):
         """
     )
 
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS
-        ix_employers_by_tan_tan
-        ON employers_by_tan(tan)
-        """
-    )
 
     # --------------------------------------------------
     # employee_details
