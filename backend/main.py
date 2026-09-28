@@ -2,6 +2,9 @@ import os
 import re
 import uuid
 import tempfile
+import hashlib
+import hmac
+import time
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -186,6 +189,82 @@ def get_slip_months(slip: dict) -> list:
 
 
 # =========================================================
+# ADMIN SESSION HELPERS
+# =========================================================
+
+ADMIN_SESSION_MAX_AGE = 8 * 60 * 60
+
+
+def _admin_username() -> str:
+    return os.getenv("ADMIN_USERNAME", "admin_27")
+
+
+def _admin_password() -> str:
+    return os.getenv("ADMIN_PASSWORD", "@admin_def27")
+
+
+def _admin_session_secret() -> str:
+    # For production, set ADMIN_SESSION_SECRET in Render.
+    return os.getenv(
+        "ADMIN_SESSION_SECRET",
+        _admin_password() + "::form16-session",
+    )
+
+
+def create_admin_session_token() -> str:
+    issued_at = str(int(time.time()))
+    signature = hmac.new(
+        _admin_session_secret().encode("utf-8"),
+        issued_at.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{issued_at}.{signature}"
+
+
+def is_valid_admin_session(token: Optional[str]) -> bool:
+    if not token or "." not in token:
+        return False
+
+    issued_at_text, supplied_signature = token.split(".", 1)
+
+    try:
+        issued_at = int(issued_at_text)
+    except (TypeError, ValueError):
+        return False
+
+    age = int(time.time()) - issued_at
+    if age < 0 or age > ADMIN_SESSION_MAX_AGE:
+        return False
+
+    expected_signature = hmac.new(
+        _admin_session_secret().encode("utf-8"),
+        issued_at_text.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac.compare_digest(
+        supplied_signature,
+        expected_signature,
+    )
+
+
+def require_admin_session(admin_session: Optional[str]) -> None:
+    if not is_valid_admin_session(admin_session):
+        raise HTTPException(
+            status_code=401,
+            detail="Admin authentication required.",
+        )
+
+
+def request_uses_https(request: Request) -> bool:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    return (
+        request.url.scheme == "https"
+        or forwarded_proto.lower() == "https"
+    )
+
+
+# =========================================================
 # PYDANTIC SCHEMAS
 # =========================================================
 
@@ -231,6 +310,13 @@ class EmployeeDetailSchema(BaseModel):
     pan: str
     office_school_name: Optional[str] = None
     tan_id: Optional[str] = None
+
+
+class AdminSettingsSchema(BaseModel):
+    fee_amount: float = Field(..., ge=0)
+    upi_id: str = ""
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
 # =========================================================
 # HTML PAGES
@@ -790,9 +876,7 @@ async def admin_page(
     request: Request,
     admin_session: str = Cookie(None),
 ):
-
-    if admin_session == "authenticated":
-
+    if is_valid_admin_session(admin_session):
         return RedirectResponse(
             url="/admin/dashboard",
             status_code=303,
@@ -814,15 +898,16 @@ async def admin_login(
     username: str = Form(...),
     password: str = Form(...),
 ):
+    username_ok = hmac.compare_digest(
+        username,
+        _admin_username(),
+    )
+    password_ok = hmac.compare_digest(
+        password,
+        _admin_password(),
+    )
 
-    # Existing credentials retained for now.
-    # Authentication hardening can be handled separately.
-
-    if (
-        username == "admin_27"
-        and password == "@admin_def27"
-    ):
-
+    if username_ok and password_ok:
         response = RedirectResponse(
             url="/admin/dashboard",
             status_code=303,
@@ -830,9 +915,11 @@ async def admin_login(
 
         response.set_cookie(
             key="admin_session",
-            value="authenticated",
+            value=create_admin_session_token(),
+            max_age=ADMIN_SESSION_MAX_AGE,
             httponly=True,
             samesite="lax",
+            secure=request_uses_https(request),
         )
 
         return response
@@ -849,19 +936,16 @@ async def admin_login(
 
 @app.get("/admin/logout")
 async def admin_logout():
-
     response = RedirectResponse(
         url="/admin",
         status_code=303,
     )
-
     response.delete_cookie("admin_session")
-
     return response
 
 
 # =========================================================
-# ADMIN SETTINGS / FINANCIAL YEAR
+# ADMIN SETTINGS
 # =========================================================
 
 @app.post("/api/admin/financial-year")
@@ -870,20 +954,13 @@ def set_financial_year(
     admin_session: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
-
-    if admin_session != "authenticated":
-        raise HTTPException(
-            status_code=401,
-            detail="Admin authentication required.",
-        )
+    require_admin_session(admin_session)
 
     try:
         financial_year = validate_financial_year(
             data.financial_year
         )
-
     except ValueError as exc:
-
         raise HTTPException(
             status_code=400,
             detail=str(exc),
@@ -892,13 +969,10 @@ def set_financial_year(
     settings = db.query(AdminSettings).first()
 
     if not settings:
-
         settings = AdminSettings(
             financial_year=financial_year,
         )
-
         db.add(settings)
-
     else:
         settings.financial_year = financial_year
 
@@ -914,6 +988,48 @@ def set_financial_year(
     }
 
 
+@app.post("/api/admin/settings")
+def update_admin_settings(
+    data: AdminSettingsSchema,
+    admin_session: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    require_admin_session(admin_session)
+
+    settings = db.query(AdminSettings).first()
+    if not settings:
+        settings = AdminSettings()
+        db.add(settings)
+
+    settings.fee_amount = float(data.fee_amount)
+    settings.upi_id = data.upi_id.strip()
+    settings.telegram_bot_token = (
+        data.telegram_bot_token.strip()
+    )
+    settings.telegram_chat_id = (
+        data.telegram_chat_id.strip()
+    )
+
+    db.commit()
+    db.refresh(settings)
+
+    return {
+        "message": "Admin settings updated.",
+        "fee_amount": settings.fee_amount,
+        "upi_id": settings.upi_id or "",
+        "telegram_bot_token": (
+            settings.telegram_bot_token or ""
+        ),
+        "telegram_chat_id": (
+            settings.telegram_chat_id or ""
+        ),
+    }
+
+
+# =========================================================
+# ADMIN DASHBOARD
+# =========================================================
+
 @app.get(
     "/admin/dashboard",
     response_class=HTMLResponse,
@@ -923,9 +1039,7 @@ async def admin_dashboard(
     admin_session: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
-
-    if admin_session != "authenticated":
-
+    if not is_valid_admin_session(admin_session):
         return RedirectResponse(
             url="/admin",
             status_code=303,
@@ -938,40 +1052,49 @@ async def admin_dashboard(
     )
 
     dashboard_data = []
+    admin_generated = []
 
     for payment in payments:
-
         employee = (
             db.query(EmployeeDetail)
             .filter(
-                EmployeeDetail.user_id
-                == payment.user_id
+                EmployeeDetail.user_id == payment.user_id
             )
             .first()
         )
 
-        dashboard_data.append(
-            {
-                "payment_id": payment.id,
-                "id": payment.id,
-
-                "name": (
-                    employee.name
-                    if employee
-                    else "Unknown Employee"
-                ),
-
-                "pan": (
-                    employee.pan
-                    if employee
-                    else "N/A"
-                ),
-
-                "utr_number": payment.upi_txn_utr,
-                "amount": payment.amount,
-                "status": payment.status,
-            }
+        is_admin_generated = (
+            str(payment.upi_txn_utr or "")
+            .upper()
+            .startswith("ADMIN-")
         )
+
+        item = {
+            "payment_id": payment.id,
+            "id": payment.id,
+            "user_id": payment.user_id,
+            "name": (
+                employee.name
+                if employee
+                else "Unknown Employee"
+            ),
+            "pan": (
+                employee.pan
+                if employee
+                else "N/A"
+            ),
+            "utr_number": payment.upi_txn_utr,
+            "amount": payment.amount or 0,
+            "status": payment.status,
+            "created_at": payment.created_at,
+            "approved_at": payment.approved_at,
+            "is_admin_generated": is_admin_generated,
+        }
+
+        if is_admin_generated:
+            admin_generated.append(item)
+        else:
+            dashboard_data.append(item)
 
     settings = db.query(AdminSettings).first()
 
@@ -982,19 +1105,42 @@ async def admin_dashboard(
     )
 
     assessment_year = None
-
     if financial_year:
-
         try:
             start_year = int(financial_year[:4])
-
             assessment_year = (
                 f"{start_year + 1}-"
                 f"{(start_year + 2) % 100:02d}"
             )
-
         except (TypeError, ValueError):
             assessment_year = None
+
+    pending_count = sum(
+        1
+        for item in dashboard_data
+        if item["status"] == "pending"
+    )
+    approved_count = sum(
+        1
+        for item in dashboard_data
+        if item["status"] == "approved"
+    )
+    rejected_count = sum(
+        1
+        for item in dashboard_data
+        if item["status"] == "rejected"
+    )
+    total_revenue = sum(
+        float(item["amount"] or 0)
+        for item in dashboard_data
+        if item["status"] == "approved"
+    )
+
+    employees = (
+        db.query(EmployeeDetail)
+        .order_by(EmployeeDetail.name.asc())
+        .all()
+    )
 
     return templates.TemplateResponse(
         request=request,
@@ -1003,62 +1149,53 @@ async def admin_dashboard(
             "request": request,
             "users": dashboard_data,
             "payments": dashboard_data,
+            "admin_generated": admin_generated,
+            "employees": employees,
             "financial_year": financial_year,
             "assessment_year": assessment_year,
+            "fee_amount": (
+                settings.fee_amount
+                if settings and settings.fee_amount is not None
+                else 150.0
+            ),
+            "upi_id": (
+                settings.upi_id
+                if settings and settings.upi_id
+                else ""
+            ),
+            "telegram_bot_token": (
+                settings.telegram_bot_token
+                if settings and settings.telegram_bot_token
+                else ""
+            ),
+            "telegram_chat_id": (
+                settings.telegram_chat_id
+                if settings and settings.telegram_chat_id
+                else ""
+            ),
+            "stats": {
+                "total_users": db.query(User).count(),
+                "total_revenue": total_revenue,
+                "pending_payments": pending_count,
+                "approved_payments": approved_count,
+                "rejected_payments": rejected_count,
+                "admin_generated": len(admin_generated),
+            },
         },
     )
 
 
 # =========================================================
-# ADMIN PAYMENT APPROVAL
+# ADMIN PAYMENT ACTIONS
 # =========================================================
 
-@app.post(
-    "/admin/payment/approve/{payment_id}"
-)
+@app.post("/admin/payment/approve/{payment_id}")
 def approve_payment(
     payment_id: str,
     admin_session: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
-
-    if admin_session != "authenticated":
-
-        return RedirectResponse(
-            url="/admin",
-            status_code=303,
-        )
-
-    payment = (
-        db.query(Payment)
-        .filter(Payment.id == payment_id)
-        .first()
-    )
-
-    if payment:
-
-        payment.status = "approved"
-        payment.approved_at = datetime.utcnow()
-
-        db.commit()
-
-    return RedirectResponse(
-        url="/admin/dashboard",
-        status_code=303,
-    )
-
-
-@app.get(
-    "/api/admin/approve/{payment_id}"
-)
-def admin_approve_payment(
-    payment_id: str,
-    admin_session: str = Cookie(None),
-    db: Session = Depends(get_db),
-):
-
-    if admin_session != "authenticated":
-
+    if not is_valid_admin_session(admin_session):
         return RedirectResponse(
             url="/admin",
             status_code=303,
@@ -1071,7 +1208,6 @@ def admin_approve_payment(
     )
 
     if not payment:
-
         raise HTTPException(
             status_code=404,
             detail="Payment not found.",
@@ -1079,7 +1215,70 @@ def admin_approve_payment(
 
     payment.status = "approved"
     payment.approved_at = datetime.utcnow()
+    db.commit()
 
+    return RedirectResponse(
+        url="/admin/dashboard",
+        status_code=303,
+    )
+
+
+@app.post("/admin/payment/decline/{payment_id}")
+def decline_payment(
+    payment_id: str,
+    admin_session: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    if not is_valid_admin_session(admin_session):
+        return RedirectResponse(
+            url="/admin",
+            status_code=303,
+        )
+
+    payment = (
+        db.query(Payment)
+        .filter(Payment.id == payment_id)
+        .first()
+    )
+
+    if not payment:
+        raise HTTPException(
+            status_code=404,
+            detail="Payment not found.",
+        )
+
+    payment.status = "rejected"
+    payment.approved_at = None
+    db.commit()
+
+    return RedirectResponse(
+        url="/admin/dashboard",
+        status_code=303,
+    )
+
+
+@app.get("/api/admin/approve/{payment_id}")
+def admin_approve_payment(
+    payment_id: str,
+    admin_session: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    require_admin_session(admin_session)
+
+    payment = (
+        db.query(Payment)
+        .filter(Payment.id == payment_id)
+        .first()
+    )
+
+    if not payment:
+        raise HTTPException(
+            status_code=404,
+            detail="Payment not found.",
+        )
+
+    payment.status = "approved"
+    payment.approved_at = datetime.utcnow()
     db.commit()
 
     return {
@@ -1087,6 +1286,81 @@ def admin_approve_payment(
             f"Payment {payment_id} successfully approved."
         )
     }
+
+
+# =========================================================
+# ADMIN DIRECT FORM-16 GENERATION
+# =========================================================
+
+@app.post("/admin/form16/generate/{user_id}")
+def admin_generate_form16(
+    user_id: str,
+    admin_session: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    if not is_valid_admin_session(admin_session):
+        return RedirectResponse(
+            url="/admin",
+            status_code=303,
+        )
+
+    employee = (
+        db.query(EmployeeDetail)
+        .filter(EmployeeDetail.user_id == user_id)
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee details not found.",
+        )
+
+    if not employee.tan_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Employer TAN is missing for this employee.",
+        )
+
+    financial_year = get_active_financial_year(db)
+
+    has_ledger = (
+        db.query(MonthlyLedger)
+        .filter(
+            MonthlyLedger.user_id == user_id,
+            MonthlyLedger.financial_year == financial_year,
+        )
+        .first()
+    )
+
+    if not has_ledger:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No salary ledger found for FY "
+                f"{financial_year}."
+            ),
+        )
+
+    payment_id = str(uuid.uuid4())
+    admin_utr = f"ADMIN-{uuid.uuid4().hex.upper()}"
+
+    record = Payment(
+        id=payment_id,
+        user_id=user_id,
+        amount=0.0,
+        upi_txn_utr=admin_utr,
+        status="approved",
+        approved_at=datetime.utcnow(),
+    )
+
+    db.add(record)
+    db.commit()
+
+    return RedirectResponse(
+        url=f"/api/download/form16/{payment_id}",
+        status_code=303,
+    )
 
 
 # =========================================================
@@ -1136,9 +1410,16 @@ def send_telegram_notification(
             else "Unknown PAN"
         )
 
+        base_url = (
+            os.getenv("PUBLIC_BASE_URL")
+            or os.getenv("RENDER_EXTERNAL_URL")
+            or ""
+        ).rstrip("/")
+
         approve_link = (
-            "http://127.0.0.1:8000"
-            f"/api/admin/approve/{payment_id}"
+            f"{base_url}/admin/dashboard"
+            if base_url
+            else "/admin/dashboard"
         )
 
         message = (
