@@ -171,7 +171,7 @@ if december is None:
         "is_auto_generated": True,
     }
 
-    flags = []
+    flags = ["AUTO_GENERATED_JANUARY: Actual January salary slip should override this projected entry."]
     for field, pattern in classifications.items():
         projected = project_field_forward(field, pattern, december, jan_basic)
         if projected is None:
@@ -181,7 +181,9 @@ if december is None:
             jan_ledger[field] = projected
 
     if notes:
-        jan_ledger["note"] = " ".join(notes)
+          jan_ledger["note"] = "AUTO-GENERATED JANUARY PROJECTION. " + " ".join(notes)
+    else:
+          jan_ledger["note"] = "AUTO-GENERATED JANUARY PROJECTION."
     if flags:
         jan_ledger["flags"] = flags
 
@@ -212,21 +214,32 @@ def compute_february_tds(cycle_months_mar_to_jan: list, feb_projected_gross: flo
       3. Total TDS already cut so far (Mar..Jan) = sum of tds_deducted so far
       4. Feb deduction = total_tax_due - tds_already_cut  (floor at 0)
     """
-    gross_so_far = sum(m["gross_salary"] for m in cycle_months_mar_to_jan)
-    total_cycle_gross = gross_so_far + feb_projected_gross
+    gross_so_far = round(
+    sum(float(m.get("gross_salary") or 0) for m in cycle_months_mar_to_jan),
+        2,
+      )
+
+    feb_projected_gross = round(float(feb_projected_gross or 0), 2)
+    total_cycle_gross = round(gross_so_far + feb_projected_gross, 2)
 
     tax_breakdown = compute_annual_tax(total_cycle_gross)
-    total_tax_due = tax_breakdown["total_tax_payable"]
+    total_tax_due = round(float(tax_breakdown.get("total_tax_payable") or 0), 2)
 
-    tds_already_cut = sum(m.get("tds_deducted", 0) for m in cycle_months_mar_to_jan)
-
-    feb_deduction = max(0, total_tax_due - tds_already_cut)
+    tds_already_cut = round(
+        sum(float(m.get("tds_deducted") or 0) for m in cycle_months_mar_to_jan),
+        2,
+    )
+    remaining_tax_due = round(max(0.0, total_tax_due - tds_already_cut), 2)
+    feb_deduction = round(min(feb_projected_gross, remaining_tax_due), 2)
+    remaining_tax_payable = round(max(0.0, remaining_tax_due - feb_deduction), 2)
 
     return {
         "total_cycle_gross": total_cycle_gross,
         "tax_breakdown": tax_breakdown,
         "tds_already_cut": tds_already_cut,
         "feb_tds_deduction": feb_deduction,
+        "remaining_tax_payable": remaining_tax_payable,
+        "tax_shortfall": remaining_tax_payable > 0,
         "feb_net_payable": round(feb_projected_gross - feb_deduction, 2),
     }
 
