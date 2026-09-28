@@ -607,4 +607,3 @@ def download_pdf(payment_id: str, db: Session = Depends(get_db)):
     
     return FileResponse(path=pdf_path, filename=f"Form16_{user.pan}.pdf", media_type='application/pdf')
 
-    return FileResponse(output, filename="Form_16_Final_Design.pdf", media_type="application/pdf")
