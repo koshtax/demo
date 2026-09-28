@@ -6,3 +6,4 @@ requests
 weasyprint
 jinja2
 python-multipart
+pdfplumber
