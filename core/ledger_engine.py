@@ -22,28 +22,129 @@ basic pay) or missing, the increment check is SKIPPED for that cycle and
 January's basic carries forward from December unchanged. Flag for review.
 """
 
-from pay_matrix import build_full_matrix, find_level_and_cell, next_cell
-from tax_calculator import compute_annual_tax
-from component_classifier import classify_all_fields, project_field_forward
+from .pay_matrix import build_full_matrix, find_level_and_cell, next_cell
+from .tax_calculator import compute_annual_tax
+from .component_classifier import classify_all_fields, project_field_forward
 
-STRUCTURAL_KEYS = {"month", "year", "basic_pay", "source", "is_auto_generated",
-                    "gross_salary", "tds_deducted", "note", "flags"}
+STRUCTURAL_KEYS = {
+    "id",
+    "user_id",
+    "month",
+    "year",
+    "month_year",
+    "financial_year",
+    "basic_pay",
+    "source",
+    "is_auto_generated",
+    "gross_salary",
+    "net_pay",
+    "tds_deducted",
+    "line_items",
+    "line_items_json",
+    "deductions",
+    "deductions_json",
+    "gpf",
+    "gli",
+    "prof_tax",
+    "tds",
+    "note",
+    "flags",
+}
 
 
 def is_combined_bill(month_entry: dict) -> bool:
-    return month_entry is None or month_entry.get("source") == "combined_period"
+    if month_entry is None:
+        return True
 
+    return (
+        month_entry.get("source") in {"combined_period", "arrear"}
+        or month_entry.get("is_arrear") is True
+    )
 
-def generate_january_ledger(history: list, matrix: dict) -> dict:
+def parse_financial_year(financial_year: str):
+    """
+    Admin-selected FY ko cycle start/end year me convert karta hai.
+
+    Example:
+        "2026-27" -> (2026, 2027)
+
+    Payroll cycle:
+        March 2026 ... February 2027
+    """
+
+    if not financial_year:
+        raise ValueError("Financial year is required.")
+
+    value = str(financial_year).strip()
+
+    try:
+        start_text, end_text = value.split("-", 1)
+        start_year = int(start_text)
+
+        if len(end_text) == 2:
+            end_year = (start_year // 100) * 100 + int(end_text)
+        else:
+            end_year = int(end_text)
+
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"Invalid financial year: {financial_year}. Expected format YYYY-YY."
+        )
+
+    if end_year != start_year + 1:
+        raise ValueError(
+            f"Invalid financial year: {financial_year}. Years must be consecutive."
+        )
+
+    return start_year, end_year
+
+def generate_january_ledger(
+    history: list,
+    matrix: dict,
+    financial_year: str
+) -> dict:
     """
     history: chronological list of monthly ledger dicts for Mar..Dec of the
     cycle so far. Each is a flat dict: {month, year, basic_pay, source,
     <allowance fields...>}. The last entry must be December.
     Returns the auto-generated January ledger dict.
     """
-    december = history[-1]
-    june = next((m for m in history if m.get("month") == 6), None)
-    july = next((m for m in history if m.get("month") == 7), None)
+    start_year, end_year = parse_financial_year(financial_year)
+
+december = next(
+    (
+        m for m in reversed(history)
+        if m.get("month") == 12
+        and m.get("year") == start_year
+        and not is_combined_bill(m)
+    ),
+    None,
+)
+
+june = next(
+    (
+        m for m in reversed(history)
+        if m.get("month") == 6
+        and m.get("year") == start_year
+        and not is_combined_bill(m)
+    ),
+    None,
+)
+
+july = next(
+    (
+        m for m in reversed(history)
+        if m.get("month") == 7
+        and m.get("year") == start_year
+        and not is_combined_bill(m)
+    ),
+    None,
+)
+
+if december is None:
+    raise ValueError(
+        f"Clean December salary entry not found for FY {financial_year}."
+    )
 
     notes = []
     if is_combined_bill(june) or is_combined_bill(july):
