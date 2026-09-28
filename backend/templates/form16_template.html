@@ -418,17 +418,17 @@
     <tr><td class="section">9. Deduction under chapter VI-A</td><td></td><td class="center bold">Qualifying Amount</td><td class="center bold">Deductible Amount</td></tr>
     <tr><td class="section">(A) Sections 80C, 80 CCC and 80 CCD</td><td></td><td></td><td></td></tr>
     <tr><td>(a) Section 80C Amount</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(i) GPF</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(ii) LIC (including G.I.)</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(iii) LIC Premium</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(iv) NSC Purchased/PPF/PLI</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(v) Bank Fixed Deposits</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(vi) Tuition fee</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(vii) Repayment of HBA/</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(viii) Equity Linked Saving Scheme/Mutual Fund</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(ix) Interest of NSC Reinvested</td><td>Rs.</td><td></td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(x) Total section 80C</td><td>Rs.</td><td>0.00</td><td></td></tr>
-    <tr><td>&nbsp;&nbsp;(vii) Total Section 80C</td><td></td><td>0.00</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(i) GPF</td><td>Rs.</td><td class="amount">{{ tax_data.total_gpf|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(ii) LIC (including G.I.)</td><td>Rs.</td><td class="amount">{{ tax_data.total_gis|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(iii) LIC Premium</td><td>Rs.</td><td class="amount">{{ tax_data.lic_premium|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(iv) NSC Purchased/PPF/PLI</td><td>Rs.</td><td class="amount">{{ tax_data.nsc|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(v) Bank Fixed Deposits</td><td>Rs.</td><td class="amount">{{ tax_data.fd|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(vi) Tuition fee</td><td>Rs.</td><td class="amount">{{ tax_data.tuition|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(vii) Repayment of HBA/</td><td>Rs.</td><td class="amount">{{ tax_data.hba|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(viii) Equity Linked Saving Scheme/Mutual Fund</td><td>Rs.</td><td class="amount">{{ tax_data.mutual_fund|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(ix) Interest of NSC Reinvested</td><td>Rs.</td><td class="amount">{{ tax_data.nsc_interest|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(x) Total section 80C</td><td>Rs.</td><td class="amount">{{ tax_data.total_80c|default('0.00') }}</td><td></td></tr>
+    <tr><td>&nbsp;&nbsp;(vii) Total Section 80C</td><td></td><td></td><td class="amount">{{ tax_data.total_80c_deductible|default('0.00') }}</td></tr>
     <tr><td>(b) Sections 80 CCC</td><td></td><td>0.00</td><td></td></tr>
     <tr><td>(c) Sections 80CCD</td><td></td><td></td><td></td></tr>
     <tr><td colspan="4" class="small">Note : Aggregate amount deducted under section 80C, 80CCC and 80CCD(1) shall not exceed 1.5 lakh rupees.</td></tr>
@@ -502,22 +502,23 @@
     <tbody>
             
       <!-- Real-World Dynamic Loop: Jitne mahine ka data DB me hoga, bas utni row print hongi -->
+<!-- Real-World Dynamic Loop: Jitne mahine ka data DB me hoga, utni row print hongi -->
       {% for m in ledger_data %}
       <tr>
-        <td class="text">{{ m.month }}</td>
-        <td class="num">{{ m.basic_pay | default('0.00') }}</td>
+        <td class="text">{{ m.month_name }}</td>
+        <td class="num">{{ m.basic | default('0.00') }}</td>
         <td class="num">{{ m.da | default('0.00') }}</td>
         <td class="num">{{ m.hra | default('0.00') }}</td>
-        <td class="num">{{ m.medical | default('0.00') }}</td>
-        <td class="num">{{ m.ta | default('0.00') }}</td> 
-        <td class="num">{{ m.gross_salary | default('0.00') }}</td>
+        <td class="num">0.00</td> <!-- Medical -->
+        <td class="num">0.00</td> <!-- TA -->
+        <td class="num">{{ m.gross | default('0.00') }}</td>
         <td class="num">{{ m.gpf | default('0.00') }}</td>
-        <td class="num">{{ m.health_ins | default('0.00') }}</td>
-        <td class="num">{{ m.gis | default('0.00') }}</td>
+        <td class="num">0.00</td> <!-- Health Ins -->
+        <td class="num">{{ m.gli | default('0.00') }}</td>
         <td class="num">{{ m.prof_tax | default('0.00') }}</td>
-        <td class="num">{{ m.income_tax | default('0.00') }}</td> 
-        <td class="num">{{ m.other_deductions | default('0.00') }}</td>            
-        <td class="num">{{ m.total_deductions | default('0.00') }}</td> 
+        <td class="num">{{ m.tds | default('0.00') }}</td> 
+        <td class="num">0.00</td> <!-- Other -->
+        <td class="num">{{ m.total_deduction | default('0.00') }}</td> 
         <td class="num">{{ m.net_pay | default('0.00') }}</td> 
       </tr>
       {% endfor %}
