@@ -25,7 +25,99 @@ MONTH_MAP = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }
+MONTH_NAMES = {
+    1: "January",
+    2: "February",
+    3: "March",
+    4: "April",
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September",
+    10: "October",
+    11: "November",
+    12: "December",
+}
 
+
+def month_year_key(month: int, year: int) -> str:
+    """
+    Database-safe month identity.
+
+    Example:
+        January 2026 -> 2026-01
+        February 2027 -> 2027-02
+    """
+    return f"{int(year):04d}-{int(month):02d}"
+
+
+def expand_month_range(
+    start_month: int,
+    start_year: int,
+    end_month: int,
+    end_year: int
+) -> list:
+    """
+    Start month/year se end month/year tak saare months return karta hai.
+
+    Example:
+        Jun 2025 - Oct 2025
+        ->
+        [(6, 2025), (7, 2025), (8, 2025), (9, 2025), (10, 2025)]
+    """
+
+    if not start_month or not end_month:
+        return []
+
+    start = int(start_year) * 12 + (int(start_month) - 1)
+    end = int(end_year) * 12 + (int(end_month) - 1)
+
+    if end < start:
+        return []
+
+    # OCR/invalid data ki wajah se bahut bada accidental range na bane.
+    if end - start > 120:
+        return []
+
+    months = []
+
+    for value in range(start, end + 1):
+        year, zero_based_month = divmod(value, 12)
+        months.append((zero_based_month + 1, year))
+
+    return months
+
+
+def enrich_period(period: dict) -> dict:
+    """
+    Existing `months` structure ko preserve karte hue
+    normalized month_year information add karta hai.
+    """
+
+    months = period.get("months") or []
+
+    period["month_years"] = [
+        month_year_key(month, year)
+        for month, year in months
+        if month and year
+    ]
+
+    period["month_year_labels"] = [
+        f"{MONTH_NAMES.get(month, str(month))} {year}"
+        for month, year in months
+        if month and year
+    ]
+
+    period["month_count"] = len(period["month_years"])
+
+    period["primary_month_year"] = (
+        period["month_years"][0]
+        if period["month_years"]
+        else None
+    )
+
+    return period
 # Canonical field name -> regex fragments that could label it.
 # Add more synonyms here as new department formats are seen.
 ALLOWANCE_SYNONYMS = {
@@ -68,61 +160,221 @@ def split_into_slip_blocks(full_text: str) -> list:
 
 def parse_period(header_line: str) -> dict:
     """
-    'Salary Slip - Jun-Oct 2025 Salary'   -> combined, same year
-    'Salary Slip - Jul 2022-Jan 2025 Salary' -> combined, CROSS-YEAR (arrear)
-    'Salary Slip - Jan 2026 Salary'       -> single month
-    'Salary Slip - Jul-Dec 2024 Arrear'   -> combined, explicit arrear
+    Salary slip ke header se exact month + year extract karta hai.
+
+    IMPORTANT:
+    Ye function Financial Year decide nahi karega.
+
+    Example:
+        Salary Slip - Jan 2026 Salary
+        Salary Slip - Jun-Oct 2025 Salary
+        Salary Slip - Nov-Feb 2027 Salary
+        Salary Slip - Nov 2026-Feb 2027 Salary
+        Salary Slip - Jul 2022-Jan 2025 Salary
+        Salary Slip - Jul-Dec 2024 Arrear
     """
-    m = re.search(r"Salary Slip\s*-\s*(.+?)\s*(?:Salary|Arrear)\s*$", header_line, re.IGNORECASE)
+
+    base = {
+        "is_combined": False,
+        "months": [],
+        "raw": None,
+        "is_arrear": False,
+        "cross_year": False,
+    }
+
+    m = re.search(
+        r"Salary Slip\s*-\s*(.+?)\s*(Salary|Arrear)\s*$",
+        header_line,
+        re.IGNORECASE
+    )
+
     if not m:
-        return {"is_combined": False, "months": [], "raw": None, "is_arrear": False}
+        return enrich_period(base)
+
     period_str = m.group(1).strip()
-    is_explicit_arrear = bool(re.search(r"arrear", header_line, re.IGNORECASE))
 
-    # Cross-year range: "Jul 2022-Jan 2025" — always treated as an arrear
-    # (a normal payroll bill never spans multiple years; this is a
-    # retroactive back-payment, e.g. a pending pay-fixation/promotion order).
-    cross_year_match = re.match(r"([A-Za-z]{3,})\s+(\d{4})\s*-\s*([A-Za-z]{3,})\s+(\d{4})", period_str)
-    if cross_year_match:
-        start_mon, start_year, end_mon, end_year = cross_year_match.groups()
-        return {
-            "is_combined": True,
-            "months": [(MONTH_MAP.get(start_mon[:3].lower()), int(start_year)),
-                       (MONTH_MAP.get(end_mon[:3].lower()), int(end_year))],
+    is_explicit_arrear = (
+        m.group(2).lower() == "arrear"
+    )
+
+    # ---------------------------------------------------------
+    # CASE 1
+    # Dono side year available:
+    #
+    # Jul 2022-Jan 2025
+    # Nov 2026-Feb 2027
+    # ---------------------------------------------------------
+
+    cross = re.fullmatch(
+        r"([A-Za-z]{3,})\s+(\d{4})\s*-\s*"
+        r"([A-Za-z]{3,})\s+(\d{4})",
+        period_str
+    )
+
+    if cross:
+
+        start_mon, start_year, end_mon, end_year = cross.groups()
+
+        start_month = MONTH_MAP.get(
+            start_mon[:3].lower()
+        )
+
+        end_month = MONTH_MAP.get(
+            end_mon[:3].lower()
+        )
+
+        months = expand_month_range(
+            start_month,
+            int(start_year),
+            end_month,
+            int(end_year)
+        )
+
+        period = {
+            "is_combined": len(months) > 1,
+            "months": months,
             "raw": period_str,
-            "is_arrear": True,
-            "cross_year": True,
+
+            # Existing behaviour preserve:
+            # multi-year salary period arrear-like bill maana jayega.
+            "is_arrear": (
+                is_explicit_arrear
+                or int(start_year) != int(end_year)
+            ),
+
+            "cross_year": (
+                int(start_year) != int(end_year)
+            ),
         }
 
-    # Same-year range: "Jun-Oct 2025"
-    range_match = re.match(r"([A-Za-z]{3,})-([A-Za-z]{3,})\s+(\d{4})", period_str)
-    if range_match:
-        start_mon, end_mon, year = range_match.groups()
-        start_num = MONTH_MAP.get(start_mon[:3].lower())
-        end_num = MONTH_MAP.get(end_mon[:3].lower())
-        months = []
-        if start_num and end_num:
-            cur = start_num
-            while True:
-                months.append((cur, int(year)))
-                if cur == end_num:
-                    break
-                cur = cur + 1 if cur < 12 else 1
-        return {
-            "is_combined": True, "months": months, "raw": period_str,
-            "is_arrear": is_explicit_arrear, "cross_year": False,
+        if not months:
+            period["parse_error"] = (
+                "Invalid or reversed month/year range."
+            )
+
+        return enrich_period(period)
+
+    # ---------------------------------------------------------
+    # CASE 2
+    # Ek hi printed year:
+    #
+    # Jun-Oct 2025
+    #
+    # Special:
+    # Nov-Feb 2027
+    #
+    # Iska matlab:
+    # Nov 2026
+    # Dec 2026
+    # Jan 2027
+    # Feb 2027
+    # ---------------------------------------------------------
+
+    same = re.fullmatch(
+        r"([A-Za-z]{3,})\s*-\s*"
+        r"([A-Za-z]{3,})\s+(\d{4})",
+        period_str
+    )
+
+    if same:
+
+        start_mon, end_mon, printed_year = same.groups()
+
+        start_month = MONTH_MAP.get(
+            start_mon[:3].lower()
+        )
+
+        end_month = MONTH_MAP.get(
+            end_mon[:3].lower()
+        )
+
+        end_year = int(printed_year)
+
+        if (
+            start_month
+            and end_month
+            and start_month <= end_month
+        ):
+            start_year = end_year
+
+        else:
+            start_year = end_year - 1
+
+        months = expand_month_range(
+            start_month,
+            start_year,
+            end_month,
+            end_year
+        )
+
+        period = {
+            "is_combined": len(months) > 1,
+            "months": months,
+            "raw": period_str,
+            "is_arrear": is_explicit_arrear,
+            "cross_year": start_year != end_year,
         }
 
-    # Single month: "Jan 2026"
-    single_match = re.match(r"([A-Za-z]{3,})\s+(\d{4})", period_str)
-    if single_match:
-        mon, year = single_match.groups()
-        return {
-            "is_combined": False, "months": [(MONTH_MAP.get(mon[:3].lower()), int(year))],
-            "raw": period_str, "is_arrear": is_explicit_arrear, "cross_year": False,
+        if not months:
+            period["parse_error"] = (
+                "Could not resolve month range."
+            )
+
+        return enrich_period(period)
+
+    # ---------------------------------------------------------
+    # CASE 3
+    # Single salary month:
+    #
+    # Jan 2026
+    # ---------------------------------------------------------
+
+    single = re.fullmatch(
+        r"([A-Za-z]{3,})\s+(\d{4})",
+        period_str
+    )
+
+    if single:
+
+        mon, year = single.groups()
+
+        month = MONTH_MAP.get(
+            mon[:3].lower()
+        )
+
+        months = (
+            [(month, int(year))]
+            if month
+            else []
+        )
+
+        period = {
+            "is_combined": False,
+            "months": months,
+            "raw": period_str,
+            "is_arrear": is_explicit_arrear,
+            "cross_year": False,
         }
 
-    return {"is_combined": False, "months": [], "raw": period_str, "is_arrear": is_explicit_arrear, "cross_year": False}
+        if not months:
+            period["parse_error"] = (
+                "Unrecognised month name."
+            )
+
+        return enrich_period(period)
+
+    # Unknown format
+
+    base.update({
+        "raw": period_str,
+        "is_arrear": is_explicit_arrear
+    })
+
+    base["parse_error"] = (
+        "Unrecognised salary period format."
+    )
+
+    return enrich_period(base)
 
 
 def extract_amount(label_patterns, text) -> float:
@@ -145,9 +397,17 @@ def extract_between(start_label: str, end_labels: list, text: str) -> str:
 
 def parse_slip_block(block: str) -> dict:
     header_match = re.search(r"(Salary Slip\s*-\s*.*?(?:Salary|Arrear))", block, re.IGNORECASE)
-    period_info = parse_period(header_match.group(1)) if header_match else {
-        "is_combined": False, "months": [], "raw": None, "is_arrear": False, "cross_year": False
-    }
+    period_info = (
+    parse_period(header_match.group(1))
+    if header_match
+    else enrich_period({
+        "is_combined": False,
+        "months": [],
+        "raw": None,
+        "is_arrear": False,
+        "cross_year": False
+    })
+)
 
     result = {
         "employee_name": extract_between(r"Employee Name", [r"Designation"], block),
