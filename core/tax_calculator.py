@@ -6,6 +6,7 @@ not hardcoded in production.
 """
 
 STANDARD_DEDUCTION = 75000
+REBATE_87A_MAX = 60000
 REBATE_87A_LIMIT = 1200000  # taxable income (post standard deduction) up to which tax is nil
 CESS_RATE = 0.04
 
@@ -38,34 +39,64 @@ def compute_annual_tax(
     annual_gross: float,
     standard_deduction: float = STANDARD_DEDUCTION,
     rebate_limit: float = REBATE_87A_LIMIT,
+    rebate_max: float = REBATE_87A_MAX,
     slabs=DEFAULT_SLABS,
     cess_rate: float = CESS_RATE,
 ) -> dict:
     """
-    Returns a breakdown dict: taxable_income, slab_tax, rebate_applied,
-    tax_after_rebate, cess, total_tax_payable.
+    FY 2025-26 / AY 2026-27 New Tax Regime calculation.
 
-    NOTE: marginal relief near the exact rebate boundary (income just above
-    12,00,000) is NOT implemented here — flag this as a follow-up if slips
-    with income close to that boundary are expected.
+    Includes:
+    - Standard deduction
+    - Section 87A rebate
+    - Marginal relief just above the rebate threshold
+    - Health & Education Cess
     """
-    taxable_income = max(0, annual_gross - standard_deduction)
+
+    try:
+        annual_gross = float(annual_gross)
+        standard_deduction = float(standard_deduction)
+        rebate_limit = float(rebate_limit)
+        rebate_max = float(rebate_max)
+        cess_rate = float(cess_rate)
+    except (TypeError, ValueError):
+        raise ValueError("Tax calculation inputs must be numeric.")
+
+    if annual_gross < 0:
+        raise ValueError("Annual gross cannot be negative.")
+
+    taxable_income = max(0.0, annual_gross - standard_deduction)
     slab_tax = compute_slab_tax(taxable_income, slabs)
 
+    rebate_amount = 0.0
+    marginal_relief = 0.0
+
     if taxable_income <= rebate_limit:
-        tax_after_rebate = 0.0
+        rebate_amount = min(slab_tax, rebate_max)
+        tax_after_rebate = max(0.0, slab_tax - rebate_amount)
     else:
-        tax_after_rebate = slab_tax
+        excess_income = taxable_income - rebate_limit
+
+        if slab_tax > excess_income:
+            marginal_relief = slab_tax - excess_income
+            tax_after_rebate = excess_income
+        else:
+            tax_after_rebate = slab_tax
 
     cess = tax_after_rebate * cess_rate
     total_tax_payable = round(tax_after_rebate + cess)
 
     return {
-        "taxable_income": taxable_income,
-        "slab_tax": round(slab_tax),
-        "rebate_applied": taxable_income <= rebate_limit,
-        "tax_after_rebate": round(tax_after_rebate),
-        "cess": round(cess),
+        "annual_gross": round(annual_gross, 2),
+        "standard_deduction": round(standard_deduction, 2),
+        "taxable_income": round(taxable_income, 2),
+        "slab_tax": round(slab_tax, 2),
+        "rebate_applied": rebate_amount > 0,
+        "rebate_amount": round(rebate_amount, 2),
+        "marginal_relief_applied": marginal_relief > 0,
+        "marginal_relief": round(marginal_relief, 2),
+        "tax_after_rebate": round(tax_after_rebate, 2),
+        "cess": round(cess, 2),
         "total_tax_payable": total_tax_payable,
     }
 
