@@ -12,8 +12,8 @@ def generate_form16_pdf(user_data, ledger_data, tax_data, employer_data, output_
 
     # Data payload inject karna (Exactly HTML variables ke naam par)
     template_vars = {
-        "financial_year": "2026-27",
-        "assessment_year": "2027-2028",
+        "financial_year": "2025-26",
+        "assessment_year": "2026-2027",
         
         "employee_name": user_data.name,
         "designation": getattr(user_data, 'designation', 'CLERK'),
@@ -26,8 +26,8 @@ def generate_form16_pdf(user_data, ledger_data, tax_data, employer_data, output_
         "employer_pan": employer_data.pan if employer_data else "",
         
         "ledger_data": ledger_data,
-        "tax_data": tax_data, # For Page 3 and 4 
-        **tax_data  # 🟢 NAYA FIX: Ye Page 1 aur 2 ke direct variables ko open karega
+        "tax_data": tax_data, # For Page 3 and 4 deductions
+        **tax_data  # 🟢 NAYA FIX: Ye Page 1 aur 2 ke liye salary_amount, gross_salary sabko bahar nikal dega
     }
 
     rendered_html = template.render(template_vars)
