@@ -117,7 +117,13 @@ def create_missing_tables(cursor):
         """
     )
 
-
+    cursor.execute(
+    """
+        CREATE INDEX IF NOT EXISTS
+        ix_monthly_ledger_financial_year
+        ON monthly_ledger(financial_year)
+    """
+    )
     # --------------------------------------------------
     # employee_details
     # --------------------------------------------------
@@ -168,13 +174,6 @@ def create_missing_tables(cursor):
         """
     )
 
-    cursor.execute(
-        """
-        CREATE INDEX IF NOT EXISTS
-        ix_monthly_ledger_user_id
-        ON monthly_ledger(user_id)
-        """
-    )
 
     cursor.execute(
         """
