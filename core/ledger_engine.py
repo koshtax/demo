@@ -164,6 +164,8 @@ if december is None:
     jan_ledger = {
         "month": 1,
         "year": end_year,
+        "month_year": f"{end_year}-01",
+        "financial_year": financial_year,
         "basic_pay": jan_basic,
         "source": "auto_generated",
         "is_auto_generated": True,
