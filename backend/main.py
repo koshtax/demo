@@ -429,7 +429,30 @@ def save_employee_details(
         "office_school_name": employee.office_school_name,
         "tan_id": employee.tan_id,
     }
+@app.get("/api/employee/{user_id}")
+def get_employee_details(
+    user_id: str,
+    db: Session = Depends(get_db),
+):
+    employee = (
+        db.query(EmployeeDetail)
+        .filter(EmployeeDetail.user_id == user_id)
+        .first()
+    )
 
+    if not employee:
+        raise HTTPException(
+            status_code=404,
+            detail="Employee details not found.",
+        )
+
+    return {
+        "user_id": employee.user_id,
+        "name": employee.name,
+        "pan": employee.pan,
+        "office_school_name": employee.office_school_name,
+        "tan_id": employee.tan_id,
+    }
 # =========================================================
 # EMPLOYER / TAN CACHE
 # =========================================================
