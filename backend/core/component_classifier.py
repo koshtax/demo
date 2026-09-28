@@ -46,13 +46,48 @@ KNOWN_STANDARD_DEFAULTS = {
 
 
 def find_basic_change_transitions(history: List[Dict]) -> List[tuple]:
-    """history must be chronologically sorted. Returns (before, after) pairs
-    for every consecutive month where basic_pay differs."""
+    """
+    Returns genuine consecutive-month Basic Pay change transitions.
+
+    Combined-period and arrear entries are ignored because they must not be
+    used as evidence for normal monthly allowance behaviour.
+    """
+
+    clean_history = []
+
+    for entry in history:
+        if entry.get("source") in ("combined_period", "arrear"):
+            continue
+
+        month = entry.get("month")
+        year = entry.get("year")
+
+        if not month or not year:
+            continue
+
+        if entry.get("basic_pay") is None:
+            continue
+
+        clean_history.append(entry)
+
+    clean_history.sort(key=lambda x: (x["year"], x["month"]))
+
     transitions = []
-    for i in range(1, len(history)):
-        prev, curr = history[i - 1], history[i]
-        if prev.get("basic_pay") != curr.get("basic_pay"):
+
+    for i in range(1, len(clean_history)):
+        prev = clean_history[i - 1]
+        curr = clean_history[i]
+
+        prev_index = prev["year"] * 12 + prev["month"]
+        curr_index = curr["year"] * 12 + curr["month"]
+
+        # Only genuine consecutive calendar months.
+        if curr_index - prev_index != 1:
+            continue
+
+        if prev["basic_pay"] != curr["basic_pay"]:
             transitions.append((prev, curr))
+
     return transitions
 
 
@@ -76,20 +111,30 @@ def classify_field(field_name: str, history: List[Dict], reference_history: List
             if v_before is None or v_after is None:
                 continue
 
+            b_before = before.get("basic_pay")
+            b_after = after.get("basic_pay")
+
+            try:
+                v_before = float(v_before)
+                v_after = float(v_after)
+                b_before = float(b_before)
+                b_after = float(b_after)
+            except (TypeError, ValueError):
+                continue
+
+            if b_before <= 0 or b_after <= 0:
+                continue
+
             if v_before == v_after:
                 return "flat"
 
-            b_before = before.get("basic_pay")
-            b_after = after.get("basic_pay")
-            if not b_before or not b_after:
-                continue
+          ratio_before = v_before / b_before
+          ratio_after = v_after / b_after
 
-            ratio_before = v_before / b_before
-            ratio_after = v_after / b_after
-            if abs(ratio_after - ratio_before) <= tolerance * ratio_before:
-                return "percentage"
+          if abs(ratio_after - ratio_before) <= tolerance * abs(ratio_before):
+              return "percentage"
 
-            return "dynamic"
+          return "dynamic"
 
     if use_known_defaults and field_name in KNOWN_STANDARD_DEFAULTS:
         return KNOWN_STANDARD_DEFAULTS[field_name]
@@ -97,8 +142,22 @@ def classify_field(field_name: str, history: List[Dict], reference_history: List
     return "insufficient_data"
 
 
-def classify_all_fields(history: List[Dict], reference_history: List[Dict] = None,
-                         exclude=("basic_pay", "month", "year", "source")) -> Dict[str, str]:
+def classify_all_fields(
+    history: List[Dict],
+    reference_history: List[Dict] = None,
+    exclude=(
+        "basic_pay",
+        "month",
+        "year",
+        "month_year",
+        "source",
+        "is_auto_generated",
+        "gross_salary",
+        "tds_deducted",
+        "note",
+        "flags",
+    ),
+) -> Dict[str, str]:
     """Classify every allowance field seen anywhere in the history (skipping
     structural keys like basic_pay/month/year/source)."""
     all_fields = set()
@@ -107,21 +166,46 @@ def classify_all_fields(history: List[Dict], reference_history: List[Dict] = Non
 
     return {field: classify_field(field, history, reference_history) for field in sorted(all_fields)}
 
+def project_field_forward(
+    field_name: str,
+    pattern: str,
+    last_known: dict,
+    new_basic: float,
+) -> Optional[float]:
+    """
+    Classified allowance ko new Basic Pay par project karta hai.
 
-def project_field_forward(field_name: str, pattern: str, last_known: dict, new_basic: float) -> Optional[float]:
-    """Given a classified pattern, project this field's value onto a new
-    (incremented) basic pay. Returns None for 'dynamic'/'insufficient_data'
-    — those cases should NOT be auto-filled; carry forward the last known
-    raw value instead and flag for manual review."""
+    Agar latest month me allowance value ya Basic missing/invalid ho,
+    system guess nahi karega aur None return karega.
+    Caller us case ko manual-review ke liye flag karega.
+    """
+
     old_value = last_known.get(field_name)
     old_basic = last_known.get("basic_pay")
 
+    if old_value is None:
+        return None
+
     if pattern == "flat":
         return old_value
-    if pattern == "percentage" and old_basic:
-        return round(new_basic * (old_value / old_basic), 2)
-    return None  # dynamic / insufficient_data -> caller must flag for manual review
 
+    if pattern == "percentage":
+        if not old_basic or new_basic is None:
+            return None
+
+        try:
+            old_value = float(old_value)
+            old_basic = float(old_basic)
+            new_basic = float(new_basic)
+        except (TypeError, ValueError):
+            return None
+
+        if old_basic <= 0:
+            return None
+
+        return round(new_basic * (old_value / old_basic), 2)
+
+    return None
 
 if __name__ == "__main__":
     # --- Real data test: Vivek Kumar Pandey, Mar'25-Feb'26 monthly ledger ---
