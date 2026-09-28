@@ -183,18 +183,18 @@
      ========================================================= -->
 <section class="page">
   <div class="schedule-head center">
-    <div class="small">कर का भुगतान में भर कर दें</div>
+    <div class="small">कर का भुगतान 4 प्रति में भर कर दें</div>
     <div class="title">Schedule of Income - Tax</div>
     <div class="subtitle">आयकर की अनुसूची</div>
     <div class="small">(चार प्रतियों में भर कर दें)</div>
-    <div class="bold">वित्तीय वर्ष {{ financial_year|default('2025–26') }} (कर निर्धारण वर्ष {{ assessment_year|default('2026–2027') }})</div>
+    <div class="bold">वित्तीय वर्ष {{ financial_year|default('2026–27') }} (कर निर्धारण वर्ष {{ assessment_year|default('2027–2028') }})</div>
   </div>
 
   <table class="p1-info no-border">
     <tr><td class="label">करदाता का नाम</td><td>: {{ employee_name|default('Nitin Chandraushaa Mallick') }}</td></tr>
     <tr><td class="label">पदनाम</td><td>: {{ designation|default('Clerk') }}</td></tr>
-    <tr><td class="label">कार्यालय / विद्यालय का नाम</td><td>: {{ office_name|default('Utkramit +2 High School, Tubil') }}</td></tr>
-    <tr><td class="label">स्थायी लेखा सं. (PAN)</td><td>: {{ pan|default('ABCDE1234F') }} <span style="float:right">कोषागार का नाम : {{ treasury|default('Khunti') }}</span></td></tr>
+    <tr><td class="label">कार्यालय / विद्यालय का नाम</td><td>: {{ office_name|default('UPGRADED +2 HIGH SCHOOL, Tubil') }}</td></tr>
+    <tr><td class="label">स्थायी लेखा सं. (PAN)</td><td>: {{ pan|default('ABCDE1234F') }} <span style="float:right">कोषागार का नाम : {{ district|default('Khunti') }}</span></td></tr>
   </table>
 
   <table class="schedule">
@@ -290,12 +290,12 @@
     <tr>
       <td rowspan="2">Address ................................................<br><br>City .................... Pin code ................</td>
       <td rowspan="2">CIT (TDS)<br><br>{{ cit_tds|default('') }}</td>
-      <td>Assessment Year<br><br>{{ assessment_year|default('2026-2027') }}</td>
+      <td>Assessment Year<br><br>{{ assessment_year|default('2027-2028') }}</td>
       <td>Period with the Employer<br>From &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; To</td>
     </tr>
     <tr>
       <td></td>
-      <td>{{ period_from|default('01.04.2025') }} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {{ period_to|default('31.03.2026') }}</td>
+      <td>{{ period_from|default('01.03.2026') }} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {{ period_to|default('28.02.2027') }}</td>
     </tr>
   </table>
 
@@ -356,8 +356,8 @@
     <tr><th colspan="2">Verification</th></tr>
     <tr>
       <td colspan="2" class="verify-text">
-        I ................................................ son/daughter of ................................................ working in the capacity of<br>
-        ................................................ (designation) do hereby certify that a sum of Rs. ...................... [Rs. ......................<br>
+        I <span class="bold">{{ employee_name|default('....................') }}</span> son/daughter of <span class="bold">{{ father_name|default('....................') }}</span> working in the capacity of<br>
+        <span class="bold">{{ designation|default('....................') }}</span> (designation) do hereby certify that a sum of Rs. <span class="bold">{{ total_tds|default('..........') }}</span> [Rs. <span class="bold">{{ total_tds_words|default('..........') }}</span><br>
         (in word)] has been deducted and deposited to the Credit of the Central Government. I further certify that the information given above is true, complete and correct<br>
         and is based on the books of account, documents, TDS statements, TDS deposited and other available records.
       </td>
@@ -459,8 +459,8 @@
   </table>
 
   <table class="p3-main p3-sign">
-    <tr><td colspan="2">................................................ son/daughter of ................................................ working in the capacity of<br>................................................ (designation) do hereby certify that a sum of Rs. ........................ [Rs. ........................]</td></tr>
-    <tr><td style="width:55%">Place KHUNTI<br><br>Date</td><td>Signature of person responsible for deduction of tax</td></tr>
+    <tr><td colspan="2"><span class="bold">{{ employee_name|default('....................') }}</span> son/daughter of <span class="bold">{{ father_name|default('....................') }}</span> working in the capacity of<br><span class="bold">{{ designation|default('....................') }}</span> (designation) do hereby certify that a sum of Rs. <span class="bold">{{ total_tds|default('..........') }}</span> [Rs. <span class="bold">{{ total_tds_words|default('..........') }}</span>]</td></tr>
+    <tr><td style="width:55%">Place : KHUNTI<br><br>Date</td><td>Signature of person responsible for deduction of tax</td></tr>
     <tr><td>Designation</td><td>Full Name: {{ officer_name|default('DDO, K.B. +2 High School') }}</td></tr>
   </table>
 </section>
