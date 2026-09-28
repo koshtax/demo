@@ -104,20 +104,32 @@ def next_cell(level: int, current_basic: float, matrix: dict) -> float:
     return current_basic
 def correct_basic_pay(level: int, raw_basic: float, matrix: dict, source: str = "extracted") -> float:
     """
-    Dynamic matrix snap logic.
-    Bypasses matrix forcing if the salary slip is a combined period or arrear bill.
+    Basic Pay ko matrix ke against safely validate karta hai.
+
+    Rules:
+    - Combined-period / arrear amount ko force-correct nahi karna.
+    - Normal Basic sirf EXACT matrix cell match hone par accepted hai.
+    - Invalid Basic ko nearest/lower matrix cell par silently snap nahi karna.
     """
-    # Dynamic bypass for anomalies
+
+    if raw_basic is None:
+        return raw_basic
+
+    try:
+        raw_basic = float(raw_basic)
+    except (TypeError, ValueError):
+        return raw_basic
+
     if source in ["combined_period", "arrear"]:
-        return raw_basic  # As-is gross ke liye chhod do
-        
+        return raw_basic
+
     cells = matrix.get(level, [])
+
     if not cells:
         return raw_basic
-        
-    valid_below = [c for c in cells if c <= raw_basic]
-    # Agar arrear galti se normal mark ho gaya aur chota hai, toh original return karo (deflation bug fix)
-    if not valid_below:
-        return raw_basic 
-        
-    return max(valid_below)
+
+    for cell_value in cells:
+        if float(cell_value) == raw_basic:
+            return cell_value
+
+    return raw_basic
