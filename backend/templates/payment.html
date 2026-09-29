@@ -3,168 +3,818 @@
 {% block content %}
 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden max-w-3xl mx-auto">
     <div class="p-6 border-b border-slate-100 bg-slate-50">
-        <h2 class="text-xl font-semibold text-slate-800">Complete Payment & Download Form 16</h2>
-        <p class="text-sm text-slate-500 mt-1">Please scan the QR code below to pay the processing fee and submit your UTR number.</p>
+        <h2 class="text-xl font-semibold text-slate-800">
+            Complete Payment & Download Form 16
+        </h2>
+        <p class="text-sm text-slate-500 mt-1">
+            Pay the processing fee through UPI, then submit the 12-digit
+            UTR / reference number for verification.
+        </p>
+        {% if financial_year %}
+        <p class="text-xs text-slate-500 mt-2">
+            Financial Year:
+            <span class="font-semibold text-slate-700">
+                {{ financial_year }}
+            </span>
+        </p>
+        {% endif %}
     </div>
 
     <div class="p-8">
+        {% if not upi_id %}
+        <div class="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            Payment is temporarily unavailable because the administrator has
+            not configured a UPI ID yet.
+        </div>
+        {% endif %}
+
         <div id="payment_section" class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            
-            <!-- Dynamic QR Code Side -->
             <div class="flex flex-col items-center bg-slate-50 p-6 rounded-xl border border-slate-200">
-                <p class="text-sm font-medium text-slate-500 uppercase tracking-wide mb-4">Scan to Pay via UPI</p>
-                <!-- Dynamic QR generation using Jinja templates -->
+                <p class="text-sm font-medium text-slate-500 uppercase tracking-wide mb-4">
+                    Scan to Pay via UPI
+                </p>
+
+                {% if upi_id %}
                 <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-200 mb-4">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=upi://pay?pa={{ upi_id }}&pn=Prashasan&am={{ fee_amount }}&cu=INR" alt="UPI QR Code" class="w-48 h-48">
+                    <img
+                        id="upi_qr"
+                        src=""
+                        alt="UPI payment QR code"
+                        class="w-48 h-48"
+                        width="192"
+                        height="192"
+                    >
                 </div>
-                <p class="text-2xl font-bold text-prashasan-dark">₹ {{ fee_amount }}</p>
-                <p class="text-sm text-slate-600 mt-1 font-mono">{{ upi_id }}</p>
+
+                <p class="text-2xl font-bold text-prashasan-dark">
+                    ₹ {{ fee_amount }}
+                </p>
+                <p class="text-sm text-slate-600 mt-1 font-mono break-all text-center">
+                    {{ upi_id }}
+                </p>
+
+                <a
+                    id="upi_intent_link"
+                    href="#"
+                    class="mt-4 text-sm font-semibold text-prashasan-base hover:underline"
+                >
+                    Open in UPI App
+                </a>
+                {% else %}
+                <div class="w-48 h-48 rounded-lg border border-dashed border-slate-300 bg-white flex items-center justify-center text-center p-4 text-sm text-slate-500">
+                    UPI ID not configured
+                </div>
+                {% endif %}
             </div>
 
-            <!-- UTR Input Side -->
             <div>
-                <h3 class="text-lg font-semibold text-slate-800 mb-4">Submit Transaction Details</h3>
-                <label class="block text-sm font-medium text-slate-700 mb-1">12-Digit UTR / Ref Number <span class="text-red-500">*</span></label>
-                <input type="text" id="utr_input" placeholder="e.g. 301234567890" maxlength="12" class="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-prashasan-base focus:ring-1 focus:ring-prashasan-base font-mono text-lg mb-2">
-                <p class="text-xs text-slate-500 mb-6">You can find the UTR/Reference number in your PhonePe, GPay, or Paytm history.</p>
+                <h3 class="text-lg font-semibold text-slate-800 mb-4">
+                    Submit Transaction Details
+                </h3>
 
-                <button id="submit_utr_btn" class="w-full bg-prashasan-base hover:bg-prashasan-hover text-white px-6 py-3 rounded-lg font-semibold shadow transition-colors flex justify-center items-center gap-2 text-lg">
-                    Verify UTR & Generate Form 16
+                <label
+                    for="utr_input"
+                    class="block text-sm font-medium text-slate-700 mb-1"
+                >
+                    12-Digit UTR / Ref Number
+                    <span class="text-red-500">*</span>
+                </label>
+
+                <input
+                    type="text"
+                    id="utr_input"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="e.g. 301234567890"
+                    maxlength="12"
+                    class="w-full border border-slate-300 rounded-lg px-4 py-3 focus:outline-none focus:border-prashasan-base focus:ring-1 focus:ring-prashasan-base font-mono text-lg mb-2"
+                >
+
+                <p class="text-xs text-slate-500 mb-6">
+                    Enter the UTR / reference number shown in your UPI
+                    transaction history after the payment is completed.
+                </p>
+
+                <div
+                    id="payment_message"
+                    class="hidden mb-4 rounded-lg border px-4 py-3 text-sm"
+                    role="status"
+                ></div>
+
+                <button
+                    id="submit_utr_btn"
+                    type="button"
+                    {% if not upi_id %}disabled{% endif %}
+                    class="w-full bg-prashasan-base hover:bg-prashasan-hover text-white px-6 py-3 rounded-lg font-semibold shadow transition-colors flex justify-center items-center gap-2 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    Submit UTR for Verification
                 </button>
             </div>
         </div>
 
-        <!-- Waiting for Approval Section (Hidden Initially) -->
-        <div id="waiting_section" class="hidden flex flex-col items-center justify-center py-12 text-center">
+        <div
+            id="waiting_section"
+            class="hidden flex-col items-center justify-center py-12 text-center"
+        >
             <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-prashasan-base mb-6"></div>
-            <h3 class="text-2xl font-bold text-slate-800 mb-2">Verifying Payment...</h3>
-            <p class="text-slate-600 max-w-md">Your UTR <span id="display_utr" class="font-mono font-bold"></span> has been submitted to the admin for verification.</p>
-            <p class="text-sm text-prashasan-base mt-4 bg-prashasan-light px-4 py-2 rounded-lg inline-block">Please do not close this page. Your Form 16 will unlock automatically once approved.</p>
-        </div>
-        
-        <!-- Success/Download Section (Hidden Initially) -->
-        <div id="success_section" class="hidden flex flex-col items-center justify-center py-10 text-center">
-            <div class="bg-emerald-100 p-4 rounded-full text-emerald-600 mb-4">
-                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-            </div>
-            <h3 class="text-2xl font-bold text-slate-800 mb-2">Payment Approved!</h3>
-            <p class="text-slate-600 mb-8">Your Form 16 for FY 2025-26 has been successfully generated and a copy has been emailed to you.</p>
-            
-    <a id="download_pdf_btn" href="#" class="bg-prashasan-base hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium shadow transition-colors inline-flex items-center gap-2">
-    <!-- Download Icon -->
-    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-    </svg>
-    Download Form 16 PDF
-</a>
+
+            <h3 class="text-2xl font-bold text-slate-800 mb-2">
+                Payment Verification Pending
+            </h3>
+
+            <p class="text-slate-600 max-w-md">
+                Your UTR
+                <span id="display_utr" class="font-mono font-bold"></span>
+                has been submitted and is waiting for administrator
+                verification.
+            </p>
+
+            <p class="text-sm text-prashasan-base mt-4 bg-prashasan-light px-4 py-2 rounded-lg inline-block">
+                You may keep this page open. This screen will update
+                automatically after verification.
+            </p>
+
+            <button
+                id="manual_status_btn"
+                type="button"
+                class="mt-5 text-sm font-semibold text-prashasan-base hover:underline"
+            >
+                Check status now
+            </button>
         </div>
 
+        <div
+            id="rejected_section"
+            class="hidden flex-col items-center justify-center py-10 text-center"
+        >
+            <div class="bg-red-100 p-4 rounded-full text-red-600 mb-4">
+                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </div>
+
+            <h3 class="text-2xl font-bold text-slate-800 mb-2">
+                Payment Could Not Be Verified
+            </h3>
+
+            <p class="text-slate-600 max-w-md mb-6">
+                The submitted payment reference was not approved.
+                Please check your transaction details and submit a different
+                valid UTR if required.
+            </p>
+
+            <button
+                id="retry_payment_btn"
+                type="button"
+                class="bg-prashasan-base hover:bg-prashasan-hover text-white px-6 py-2.5 rounded-lg font-medium shadow transition-colors"
+            >
+                Submit Another UTR
+            </button>
+        </div>
+
+        <div
+            id="success_section"
+            class="hidden flex-col items-center justify-center py-10 text-center"
+        >
+            <div class="bg-emerald-100 p-4 rounded-full text-emerald-600 mb-4">
+                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4m0 0l4 4m-4-4l4-4m-4 4h10"></path>
+                </svg>
+            </div>
+
+            <h3 class="text-2xl font-bold text-slate-800 mb-2">
+                Payment Approved
+            </h3>
+
+            <p class="text-slate-600 mb-2">
+                Your Form 16
+                {% if financial_year %}
+                for FY {{ financial_year }}
+                {% endif %}
+                is now available for download.
+            </p>
+
+            <p class="text-sm text-slate-500 mb-8 max-w-md">
+                A copy is also being processed for delivery to the email
+                address saved with your application. If email delivery is
+                delayed, you can still download the PDF here.
+            </p>
+
+            <a
+                id="download_pdf_btn"
+                href="#"
+                class="bg-prashasan-base hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium shadow transition-colors inline-flex items-center gap-2"
+            >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                Download Form 16 PDF
+            </a>
+        </div>
     </div>
 </div>
 
 <script>
-    // Update Stepper UI on load
-    document.addEventListener("DOMContentLoaded", () => {
-        const steps = document.querySelectorAll('.rounded-full');
-        // Steps 1, 2, 3 completed
-        for(let i=0; i<3; i++) {
-            steps[i].classList.replace('bg-prashasan-base', 'bg-emerald-500');
-            steps[i].classList.replace('bg-slate-200', 'bg-emerald-500');
-            steps[i].classList.replace('text-slate-500', 'text-white');
-            steps[i].innerHTML = '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
-        }
-        // Step 4 active
-        steps[3].classList.replace('bg-slate-200', 'bg-prashasan-base');
-        steps[3].classList.replace('text-slate-500', 'text-white');
-    });
+    const USER_ID = "{{ user_id | default('', true) | e }}";
+    const FEE_AMOUNT = Number("{{ fee_amount | default(0, true) }}") || 0;
+    const UPI_ID = "{{ upi_id | default('', true) | e }}";
+    const FINANCIAL_YEAR = "{{ financial_year | default('', true) | e }}";
+
+    const PAYMENT_STORAGE_KEY =
+        `form16_payment_${USER_ID || "unknown"}`;
 
     let currentPaymentId = null;
+    let currentUtr = "";
     let pollInterval = null;
+    let isCheckingStatus = false;
 
-    document.getElementById('submit_utr_btn').addEventListener('click', async () => {
-        const utr = document.getElementById('utr_input').value.trim();
-        if(utr.length < 6) {
-            alert("Please enter a valid UTR number.");
+    function getElement(id) {
+        return document.getElementById(id);
+    }
+
+    function setSection(sectionId) {
+        const sectionIds = [
+            "payment_section",
+            "waiting_section",
+            "rejected_section",
+            "success_section"
+        ];
+
+        sectionIds.forEach(id => {
+            const element = getElement(id);
+            const active = id === sectionId;
+
+            element.classList.toggle("hidden", !active);
+
+            if (id !== "payment_section") {
+                element.classList.toggle("flex", active);
+            }
+        });
+    }
+
+    function showMessage(message, type = "error") {
+        const box = getElement("payment_message");
+
+        const styles = {
+            error: "border-red-200 bg-red-50 text-red-700",
+            info: "border-slate-200 bg-slate-50 text-slate-700",
+            success: "border-emerald-200 bg-emerald-50 text-emerald-700"
+        };
+
+        box.className =
+            `mb-4 rounded-lg border px-4 py-3 text-sm ${
+                styles[type] || styles.info
+            }`;
+
+        box.textContent = message;
+        box.classList.remove("hidden");
+    }
+
+    function hideMessage() {
+        getElement("payment_message").classList.add("hidden");
+    }
+
+    function setSubmitting(isSubmitting) {
+        const button = getElement("submit_utr_btn");
+
+        button.disabled = isSubmitting || !UPI_ID;
+
+        if (isSubmitting) {
+            button.dataset.originalText =
+                button.textContent.trim();
+            button.textContent = "Submitting...";
+        } else {
+            button.textContent =
+                button.dataset.originalText ||
+                "Submit UTR for Verification";
+        }
+    }
+
+    function savePaymentState() {
+        if (!USER_ID || !currentPaymentId) {
             return;
         }
 
-        // Fake user ID for demo (in production, this comes from session/URL)
-        const mockUserId = "{{ user_id }}"; 
-
-// 🟢 NAYA CODE: Browser ki memory se tumhara asali data nikalna 🟢
-        const manualDetails = JSON.parse(sessionStorage.getItem('manualPersonalDetails') || '{}');
-        const extractedSlips = JSON.parse(sessionStorage.getItem('extractedSlips') || '[]');
-
-try {
-            // POST request to submit UTR + Tumhara Personal Data
-            const response = await fetch('/api/payment/submit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_id: mockUserId,
-                    utr_number: utr,
-                    amount: "{{ fee_amount }}",
-                    office: manualDetails.office || "",
-                    mobile: manualDetails.mobile || "",
-                    email: manualDetails.email || "",
-                    slips: extractedSlips
-                })
-            });
-            
-            // 🛑 NAYA CODE: Agar backend fail hua toh alert karo aur ruk jao! 🛑
-            if (!response.ok) {
-                const errData = await response.json();
-                alert("Backend Error: " + errData.detail);
-                return; // Iske aage form Verifying par nahi jayega
-            }
-            
-            const data = await response.json();
-            currentPaymentId = data.payment_id;
-            // ... (iske neeche purana UI transition code waisa hi rahega)
-
-            // UI Transitions
-            document.getElementById('payment_section').classList.add('hidden');
-            document.getElementById('display_utr').innerText = utr;
-            document.getElementById('waiting_section').classList.remove('hidden');
-            document.getElementById('waiting_section').classList.add('flex');
-
-            // Start polling the server every 5 seconds to check if admin clicked "Approve"
-            pollInterval = setInterval(checkStatus, 5000);
-
-        } catch (error) {
-            console.error("Payment Submission Error:", error);
-            alert("Error submitting UTR. Please try again.");
-        }
-    });
-
-    async function checkStatus() {
-        if(!currentPaymentId) return;
-
         try {
-            const response = await fetch(`/api/payment/status/${currentPaymentId}`);
-            const data = await response.json();
-
-            if (data.status === "approved") {
-                clearInterval(pollInterval); // Stop asking the server
-                
-                // Show Success Screen
-                document.getElementById('waiting_section').classList.remove('flex');
-                document.getElementById('waiting_section').classList.add('hidden');
-                
-                document.getElementById('success_section').classList.remove('hidden');
-                document.getElementById('success_section').classList.add('flex');
-                
-                // 🟢 NAYI LINE: Button ko backend se link kar diya taaki sahi payment_id ki PDF mile 🟢
-                document.getElementById('download_pdf_btn').href = `/api/download/form16/${currentPaymentId}`;
-                // Optional Stepper update to Full Green
-                const steps = document.querySelectorAll('.rounded-full');
-                steps[3].classList.replace('bg-prashasan-base', 'bg-emerald-500');
-                steps[3].innerHTML = '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
-            }
+            sessionStorage.setItem(
+                PAYMENT_STORAGE_KEY,
+                JSON.stringify({
+                    payment_id: currentPaymentId,
+                    utr: currentUtr
+                })
+            );
         } catch (error) {
-            console.error("Polling error", error);
+            console.warn(
+                "Could not save payment state locally:",
+                error
+            );
         }
     }
+
+    function restorePaymentState() {
+        if (!USER_ID) {
+            return false;
+        }
+
+        try {
+            const raw =
+                sessionStorage.getItem(PAYMENT_STORAGE_KEY);
+
+            if (!raw) {
+                return false;
+            }
+
+            const state = JSON.parse(raw);
+
+            if (!state.payment_id) {
+                return false;
+            }
+
+            currentPaymentId = state.payment_id;
+            currentUtr = state.utr || "";
+
+            getElement("display_utr").textContent =
+                currentUtr || "submitted";
+
+            return true;
+
+        } catch (error) {
+            console.warn(
+                "Could not restore payment state:",
+                error
+            );
+            return false;
+        }
+    }
+
+    function clearPaymentState() {
+        try {
+            sessionStorage.removeItem(PAYMENT_STORAGE_KEY);
+        } catch (_) {
+            // Best-effort browser cleanup only.
+        }
+    }
+
+    async function saveProgress(
+        stepName,
+        progressPercent,
+        lastCompletedStep = "ddo_details"
+    ) {
+        if (!USER_ID) {
+            return false;
+        }
+
+        try {
+            const response = await fetch("/api/progress", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    user_id: USER_ID,
+                    page_name: "payment",
+                    step_name: stepName,
+                    last_completed_step: lastCompletedStep,
+                    progress_percent: progressPercent,
+                    snapshot: {}
+                })
+            });
+
+            return response.ok;
+
+        } catch (error) {
+            console.warn(
+                "Payment progress save failed:",
+                error
+            );
+            return false;
+        }
+    }
+
+    function startPolling() {
+        stopPolling();
+
+        checkStatus();
+
+        pollInterval = window.setInterval(
+            checkStatus,
+            5000
+        );
+    }
+
+    function stopPolling() {
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+    }
+
+    async function checkStatus() {
+        if (!currentPaymentId || isCheckingStatus) {
+            return;
+        }
+
+        isCheckingStatus = true;
+
+        try {
+            const response = await fetch(
+                `/api/payment/status/${
+                    encodeURIComponent(currentPaymentId)
+                }`,
+                {
+                    cache: "no-store",
+                    headers: {
+                        "Accept": "application/json"
+                    }
+                }
+            );
+
+            let data = {};
+
+            try {
+                data = await response.json();
+            } catch (_) {
+                // Handled below.
+            }
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    stopPolling();
+                    clearPaymentState();
+                    currentPaymentId = null;
+                    currentUtr = "";
+                    setSection("payment_section");
+                    showMessage(
+                        "The previous payment request could not be found. Please submit the UTR again.",
+                        "error"
+                    );
+                    return;
+                }
+
+                throw new Error(
+                    data.detail ||
+                    "Payment status could not be checked."
+                );
+            }
+
+            if (data.status === "approved") {
+                stopPolling();
+
+                getElement("download_pdf_btn").href =
+                    `/api/download/form16/${
+                        encodeURIComponent(currentPaymentId)
+                    }`;
+
+                setSection("success_section");
+                await saveProgress(
+                    "completed",
+                    100,
+                    "payment"
+                );
+
+                markStepperComplete();
+                return;
+            }
+
+            if (
+                data.status === "rejected" ||
+                data.status === "declined"
+            ) {
+                stopPolling();
+                setSection("rejected_section");
+
+                await saveProgress(
+                    "payment_rejected",
+                    85,
+                    "ddo_details"
+                );
+
+                clearPaymentState();
+                return;
+            }
+
+            setSection("waiting_section");
+
+        } catch (error) {
+            console.error("Payment status check failed:", error);
+        } finally {
+            isCheckingStatus = false;
+        }
+    }
+
+    async function submitUtr() {
+        hideMessage();
+
+        if (!USER_ID) {
+            showMessage(
+                "User ID is missing. Please return to the previous step.",
+                "error"
+            );
+            return;
+        }
+
+        if (!UPI_ID) {
+            showMessage(
+                "Payment is temporarily unavailable. Please contact the administrator.",
+                "error"
+            );
+            return;
+        }
+
+        const utr = getElement("utr_input")
+            .value
+            .trim();
+
+        if (!/^\d{12}$/.test(utr)) {
+            showMessage(
+                "Please enter a valid 12-digit UTR / reference number.",
+                "error"
+            );
+            return;
+        }
+
+        setSubmitting(true);
+
+        try {
+            const response = await fetch(
+                "/api/payment/submit",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        user_id: USER_ID,
+                        utr_number: utr,
+                        amount: FEE_AMOUNT
+                    })
+                }
+            );
+
+            let data = {};
+
+            try {
+                data = await response.json();
+            } catch (_) {
+                // Handled below.
+            }
+
+            if (!response.ok) {
+                throw new Error(
+                    data.detail ||
+                    "Payment request could not be submitted."
+                );
+            }
+
+            if (!data.payment_id) {
+                throw new Error(
+                    "Payment ID was not returned by the server."
+                );
+            }
+
+            currentPaymentId = data.payment_id;
+            currentUtr = utr;
+
+            getElement("display_utr").textContent = utr;
+
+            savePaymentState();
+
+            await saveProgress(
+                "payment_wait",
+                90,
+                "ddo_details"
+            );
+
+            setSection("waiting_section");
+            startPolling();
+
+        } catch (error) {
+            console.error(
+                "Payment submission failed:",
+                error
+            );
+
+            showMessage(
+                error.message ||
+                "Could not submit the UTR. Please try again.",
+                "error"
+            );
+
+            setSection("payment_section");
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    function setupUpiPayment() {
+        if (!UPI_ID) {
+            return;
+        }
+
+        const upiParams = new URLSearchParams({
+            pa: UPI_ID,
+            pn: "Form 16 Service",
+            am: FEE_AMOUNT.toFixed(2),
+            cu: "INR"
+        });
+
+        const upiUrl =
+            `upi://pay?${upiParams.toString()}`;
+
+        const intentLink =
+            getElement("upi_intent_link");
+
+        if (intentLink) {
+            intentLink.href = upiUrl;
+        }
+
+        const qrImage =
+            getElement("upi_qr");
+
+        if (qrImage) {
+            qrImage.src =
+                "https://api.qrserver.com/v1/create-qr-code/" +
+                "?size=192x192&data=" +
+                encodeURIComponent(upiUrl);
+        }
+    }
+
+    function setupStepper() {
+        const steps =
+            document.querySelectorAll(".rounded-full");
+
+        if (steps.length < 4) {
+            return;
+        }
+
+        for (let i = 0; i < 3; i += 1) {
+            steps[i].classList.remove(
+                "bg-prashasan-base",
+                "bg-slate-200",
+                "text-slate-500"
+            );
+            steps[i].classList.add(
+                "bg-emerald-500",
+                "text-white"
+            );
+            steps[i].innerHTML =
+                '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+                '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>' +
+                "</svg>";
+        }
+
+        steps[3].classList.remove(
+            "bg-slate-200",
+            "text-slate-500"
+        );
+        steps[3].classList.add(
+            "bg-prashasan-base",
+            "text-white"
+        );
+    }
+
+    function markStepperComplete() {
+        const steps =
+            document.querySelectorAll(".rounded-full");
+
+        if (steps.length < 4) {
+            return;
+        }
+
+        steps[3].classList.remove(
+            "bg-prashasan-base",
+            "bg-slate-200",
+            "text-slate-500"
+        );
+        steps[3].classList.add(
+            "bg-emerald-500",
+            "text-white"
+        );
+
+        steps[3].innerHTML =
+            '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+            '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>' +
+            "</svg>";
+    }
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        async () => {
+            setupStepper();
+            setupUpiPayment();
+
+            const utrInput =
+                getElement("utr_input");
+
+            utrInput.addEventListener("input", () => {
+                utrInput.value =
+                    utrInput.value
+                        .replace(/\D/g, "")
+                        .slice(0, 12);
+            });
+
+            utrInput.addEventListener(
+                "keydown",
+                event => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        submitUtr();
+                    }
+                }
+            );
+
+            getElement("submit_utr_btn")
+                .addEventListener(
+                    "click",
+                    submitUtr
+                );
+
+            getElement("manual_status_btn")
+                .addEventListener(
+                    "click",
+                    checkStatus
+                );
+
+            getElement("retry_payment_btn")
+                .addEventListener(
+                    "click",
+                    async () => {
+                        currentPaymentId = null;
+                        currentUtr = "";
+                        clearPaymentState();
+                        getElement("utr_input").value = "";
+                        setSection("payment_section");
+                        await saveProgress(
+                            "payment",
+                            80,
+                            "ddo_details"
+                        );
+                        getElement("utr_input").focus();
+                    }
+                );
+
+            await saveProgress(
+                "payment",
+                80,
+                "ddo_details"
+            );
+
+            if (restorePaymentState()) {
+                setSection("waiting_section");
+                startPolling();
+            }
+        }
+    );
+
+    document.addEventListener(
+        "visibilitychange",
+        () => {
+            if (
+                document.visibilityState === "visible" &&
+                currentPaymentId
+            ) {
+                checkStatus();
+            }
+        }
+    );
+
+    window.addEventListener(
+        "pagehide",
+        () => {
+            if (!USER_ID) {
+                return;
+            }
+
+            const payload = JSON.stringify({
+                user_id: USER_ID,
+                page_name: "payment",
+                step_name:
+                    currentPaymentId
+                        ? "payment_wait"
+                        : "payment",
+                last_completed_step: "ddo_details",
+                progress_percent:
+                    currentPaymentId ? 90 : 80,
+                snapshot: {}
+            });
+
+            if (navigator.sendBeacon) {
+                try {
+                    navigator.sendBeacon(
+                        "/api/progress",
+                        new Blob(
+                            [payload],
+                            {
+                                type: "application/json"
+                            }
+                        )
+                    );
+                } catch (_) {
+                    // Regular progress saves remain the fallback.
+                }
+            }
+        }
+    );
 </script>
 
 {% endblock %}
