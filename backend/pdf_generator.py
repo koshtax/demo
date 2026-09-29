@@ -1,10 +1,14 @@
 import calendar
 import os
 import re
+import tempfile
 from datetime import datetime
+from pathlib import Path
+from urllib.request import Request, urlopen
 
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
+from weasyprint import CSS, HTML
+from weasyprint.text.fonts import FontConfiguration
 
 from core.tax_calculator import compute_annual_tax, compute_slab_tax
 
@@ -12,6 +16,82 @@ from core.tax_calculator import compute_annual_tax, compute_slab_tax
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 TEMPLATE_NAME = "form16_template.html"
+
+# The production PDF server may not have a Devanagari font installed.
+# Fetch an OFL-licensed Noto Sans Devanagari UI font once into the runtime
+# temp directory and explicitly embed it in every generated PDF.
+DEVANAGARI_FONT_URL = (
+    "https://raw.githubusercontent.com/google/fonts/main/"
+    "ofl/notosansdevanagariui/NotoSansDevanagariUI-Regular.ttf"
+)
+DEVANAGARI_FONT_DIR = os.path.join(
+    tempfile.gettempdir(),
+    "form16_fonts",
+)
+DEVANAGARI_FONT_PATH = os.path.join(
+    DEVANAGARI_FONT_DIR,
+    "NotoSansDevanagariUI-Regular.ttf",
+)
+
+
+def _ensure_devanagari_font():
+    """Return a usable local Devanagari font path, downloading it if needed."""
+    try:
+        if (
+            os.path.isfile(DEVANAGARI_FONT_PATH)
+            and os.path.getsize(DEVANAGARI_FONT_PATH) > 50_000
+        ):
+            return DEVANAGARI_FONT_PATH
+
+        os.makedirs(DEVANAGARI_FONT_DIR, exist_ok=True)
+        temp_path = DEVANAGARI_FONT_PATH + ".download"
+
+        request = Request(
+            DEVANAGARI_FONT_URL,
+            headers={"User-Agent": "Form16-PDF-Renderer/1.0"},
+        )
+        with urlopen(request, timeout=20) as response, open(
+            temp_path, "wb"
+        ) as font_file:
+            font_file.write(response.read())
+
+        if os.path.getsize(temp_path) <= 50_000:
+            raise RuntimeError("Downloaded Devanagari font is unexpectedly small.")
+
+        os.replace(temp_path, DEVANAGARI_FONT_PATH)
+        return DEVANAGARI_FONT_PATH
+    except Exception as exc:
+        print(f"WARNING: Devanagari font setup failed: {exc}")
+        return None
+
+
+def _pdf_font_resources():
+    """Build WeasyPrint font resources without touching page/layout CSS."""
+    font_config = FontConfiguration()
+    font_path = _ensure_devanagari_font()
+
+    if not font_path:
+        return font_config, []
+
+    font_uri = Path(font_path).resolve().as_uri()
+    font_css = CSS(
+        string=f"""
+        @font-face {{
+            font-family: 'Form16 Devanagari';
+            src: url('{font_uri}') format('truetype');
+            font-style: normal;
+            font-weight: 100 900;
+        }}
+
+        html, body, table, thead, tbody, tfoot, tr, th, td,
+        div, span, p, strong, b, small {{
+            font-family: 'Liberation Sans', 'DejaVu Sans',
+                         'Form16 Devanagari', sans-serif !important;
+        }}
+        """,
+        font_config=font_config,
+    )
+    return font_config, [font_css]
 
 
 MONTH_NAMES = {
@@ -1211,14 +1291,17 @@ def generate_form16_pdf(
         )
 
     # form16_template.html already contains the complete page-size, margin,
-    # typography and table CSS. Do not inject a second generic stylesheet here:
-    # it overrides the template's 7mm/6mm page margins and compact ledger
-    # spacing, which can push a designed 4-page form onto an extra page.
+    # typography and table CSS. Inject ONLY the font face here. This embeds a
+    # Devanagari-capable font without changing the designed page geometry.
+    font_config, font_stylesheets = _pdf_font_resources()
+
     HTML(
         string=rendered_html,
         base_url=BASE_DIR,
     ).write_pdf(
-        output_filename
+        output_filename,
+        stylesheets=font_stylesheets,
+        font_config=font_config,
     )
 
     return output_filename
