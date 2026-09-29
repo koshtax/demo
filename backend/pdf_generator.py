@@ -408,6 +408,109 @@ def _prepare_ledger(ledger):
     return formatted, totals
 
 
+def _quarter_summary(formatted_ledger, financial_year):
+    """
+    Build the project's March -> February quarter totals from actual ledger rows.
+
+    Q1 = March, April, May
+    Q2 = June, July, August
+    Q3 = September, October, November
+    Q4 = December, January, February
+
+    Only rows belonging to the requested FY are counted. TDS is the deduction
+    already normalised by _prepare_ledger(), so regular and arrear TDS recorded
+    in that payment month are included. Missing months are never invented here.
+    """
+    _, start_year, end_year = _validate_financial_year(financial_year)
+
+    quarters = {
+        1: {"gross": 0.0, "tds": 0.0},
+        2: {"gross": 0.0, "tds": 0.0},
+        3: {"gross": 0.0, "tds": 0.0},
+        4: {"gross": 0.0, "tds": 0.0},
+    }
+
+    quarter_for_month = {
+        3: 1, 4: 1, 5: 1,
+        6: 2, 7: 2, 8: 2,
+        9: 3, 10: 3, 11: 3,
+        12: 4, 1: 4, 2: 4,
+    }
+
+    for row in (formatted_ledger or []):
+        month = int(row.get("month", 0) or 0)
+        year = int(row.get("year", 0) or 0)
+
+        quarter = quarter_for_month.get(month)
+        if not quarter:
+            continue
+
+        expected_year = start_year if month >= 3 else end_year
+        if year != expected_year:
+            continue
+
+        quarters[quarter]["gross"] += _number(row.get("gross"))
+        quarters[quarter]["tds"] += _number(row.get("tds"))
+
+    return quarters
+
+
+def _text_value(mapping, key, default=""):
+    """Return a trimmed optional text field from a future/manual payload."""
+    if not isinstance(mapping, dict):
+        return default
+    value = mapping.get(key, default)
+    if value is None:
+        return default
+    return str(value).strip()
+
+
+def _normalise_bin_rows(rows):
+    """
+    Future-ready Book Adjustment/BIN row shape. No value is invented.
+
+    Each row:
+      tax_deposited, receipt_no_24g, ddo_serial_no_24g,
+      transfer_voucher_date, match_status_24g
+    """
+    result = []
+    for raw in (rows or []):
+        if not isinstance(raw, dict):
+            continue
+        result.append({
+            "tax_deposited": _money(raw.get("tax_deposited"))
+                if raw.get("tax_deposited") not in (None, "") else "",
+            "receipt_no_24g": _text_value(raw, "receipt_no_24g"),
+            "ddo_serial_no_24g": _text_value(raw, "ddo_serial_no_24g"),
+            "transfer_voucher_date": _text_value(raw, "transfer_voucher_date"),
+            "match_status_24g": _text_value(raw, "match_status_24g"),
+        })
+    return result[:12]
+
+
+def _normalise_challan_rows(rows):
+    """
+    Future-ready challan row shape. No value is invented.
+
+    Each row:
+      tax_deposited, bsr_code, transfer_voucher_date,
+      challan_serial_no, oltas_status
+    """
+    result = []
+    for raw in (rows or []):
+        if not isinstance(raw, dict):
+            continue
+        result.append({
+            "tax_deposited": _money(raw.get("tax_deposited"))
+                if raw.get("tax_deposited") not in (None, "") else "",
+            "bsr_code": _text_value(raw, "bsr_code"),
+            "transfer_voucher_date": _text_value(raw, "transfer_voucher_date"),
+            "challan_serial_no": _text_value(raw, "challan_serial_no"),
+            "oltas_status": _text_value(raw, "oltas_status"),
+        })
+    return result[:4]
+
+
 def _tax_value(tax_result, *names, default=0.0):
     for name in names:
         if name in tax_result:
@@ -539,6 +642,7 @@ def generate_form16_pdf(
     ledger,
     financial_year,
     output_filename=None,
+    tds_details=None,
 ):
     """
     Render Form 16 from the already-finalised ledger supplied by main.py.
@@ -730,11 +834,68 @@ def generate_form16_pdf(
         total_tax_payable - totals["tds"]
     )
 
-    # form16_template.html currently has only Q1 as a dynamic quarter field
-    # and has no reliable deposit-mode metadata. Keep those cells blank rather
-    # than falsely putting the whole year's TDS into Q1/challan.
-    q1_tds = ""
-    challan_tax = ""
+    # ---------------------------------------------------------
+    # PART A: quarter-wise salary credited + TDS actually deducted
+    # ---------------------------------------------------------
+    quarter_summary = _quarter_summary(
+        formatted_ledger,
+        financial_year,
+    )
+
+    q1_gross = _money(quarter_summary[1]["gross"])
+    q2_gross = _money(quarter_summary[2]["gross"])
+    q3_gross = _money(quarter_summary[3]["gross"])
+    q4_gross = _money(quarter_summary[4]["gross"])
+
+    q1_tds = _money(quarter_summary[1]["tds"])
+    q2_tds = _money(quarter_summary[2]["tds"])
+    q3_tds = _money(quarter_summary[3]["tds"])
+    q4_tds = _money(quarter_summary[4]["tds"])
+
+    has_tds = totals["tds"] > 0
+
+    # ---------------------------------------------------------
+    # Future/manual TDS metadata hooks
+    # ---------------------------------------------------------
+    # These are optional on purpose. Current main.py does not need to pass
+    # tds_details, so today's flow remains backward compatible. Later the
+    # employee/employer form + DB can pass verified CIT/BIN/challan details
+    # without another generator redesign.
+    tds_details = tds_details if isinstance(tds_details, dict) else {}
+
+    district_name = (
+        _text_value(tds_details, "district_name")
+        or str(getattr(employee, "district_name", None) or "").strip()
+        or str(getattr(employer, "district_name", None) or "").strip()
+        or str(getattr(employer, "district", None) or "").strip()
+    )
+
+    # Locked project rule: Treasury Name = District Name.
+    treasury_name = district_name
+
+    cit_tds = _text_value(tds_details, "cit_tds")
+    cit_tds_address = _text_value(tds_details, "cit_tds_address")
+    cit_tds_city = _text_value(tds_details, "cit_tds_city")
+    cit_tds_pincode = _text_value(tds_details, "cit_tds_pincode")
+
+    q1_receipt_no = _text_value(tds_details, "q1_receipt_no")
+    q2_receipt_no = _text_value(tds_details, "q2_receipt_no")
+    q3_receipt_no = _text_value(tds_details, "q3_receipt_no")
+    q4_receipt_no = _text_value(tds_details, "q4_receipt_no")
+
+    # Deducted TDS is known from salary ledger. Deposit/remittance is a
+    # different fact, so keep it blank unless the user later supplies proof.
+    q1_tax_deposited = _text_value(tds_details, "q1_tax_deposited")
+    q2_tax_deposited = _text_value(tds_details, "q2_tax_deposited")
+    q3_tax_deposited = _text_value(tds_details, "q3_tax_deposited")
+    q4_tax_deposited = _text_value(tds_details, "q4_tax_deposited")
+    total_tax_deposited = _text_value(tds_details, "total_tax_deposited")
+
+    bin_rows = _normalise_bin_rows(tds_details.get("bin_rows"))
+    challan_rows = _normalise_challan_rows(tds_details.get("challan_rows"))
+
+    # Legacy single challan cell remains blank unless explicitly supplied.
+    challan_tax = _text_value(tds_details, "challan_tax")
 
     template_tax_data = dict(tax_result)
 
@@ -826,9 +987,20 @@ def generate_form16_pdf(
         ),
         "ddo_designation": ddo_designation,
 
-        # Not structured in the current schema.
-        "district": "",
-        "cit_tds": "",
+        # District/Treasury and future CIT(TDS) details.
+        # Current DB may not have these yet; blank is safer than guessing.
+        "district": district_name,
+        "district_name": district_name,
+        "treasury_name": treasury_name,
+        "cit_tds": cit_tds,
+        "cit_tds_address": cit_tds_address,
+        "cit_tds_city": cit_tds_city,
+        "cit_tds_pincode": cit_tds_pincode,
+
+        # Future/manual BIN + challan row payloads. The current template keeps
+        # the visible cells blank; these typed hooks are ready for later wiring.
+        "bin_rows": bin_rows,
+        "challan_rows": challan_rows,
 
         # Ledger.
         "ledger_data": formatted_ledger,
@@ -887,7 +1059,25 @@ def generate_form16_pdf(
         "total_tds_words": (
             _integer_to_words(totals["tds"])
         ),
+        # Part-A quarter summary.
+        "has_tds": has_tds,
+        "q1_gross": q1_gross,
+        "q2_gross": q2_gross,
+        "q3_gross": q3_gross,
+        "q4_gross": q4_gross,
         "q1_tds": q1_tds,
+        "q2_tds": q2_tds,
+        "q3_tds": q3_tds,
+        "q4_tds": q4_tds,
+        "q1_receipt_no": q1_receipt_no,
+        "q2_receipt_no": q2_receipt_no,
+        "q3_receipt_no": q3_receipt_no,
+        "q4_receipt_no": q4_receipt_no,
+        "q1_tax_deposited": q1_tax_deposited,
+        "q2_tax_deposited": q2_tax_deposited,
+        "q3_tax_deposited": q3_tax_deposited,
+        "q4_tax_deposited": q4_tax_deposited,
+        "total_tax_deposited": total_tax_deposited,
         "challan_tax": challan_tax,
         "tds_paid": _money(
             totals["tds"]
