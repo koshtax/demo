@@ -3001,6 +3001,258 @@ async def admin_dashboard(
 
 
 # =========================================================
+# ADMIN LIVE DASHBOARD API
+# =========================================================
+
+def _admin_live_payment_row(
+    payment: Payment,
+    user: Optional[User],
+    employee: Optional[EmployeeDetail],
+) -> dict:
+    """
+    JSON-safe payment representation for the admin dashboard background
+    sync. No settings, tokens or other secrets are exposed here.
+    """
+
+    return {
+        "payment_id": payment.id,
+        "user_id": payment.user_id,
+        "name": (
+            employee.name
+            if employee and employee.name
+            else "Unknown Employee"
+        ),
+        "pan": (
+            employee.pan
+            if employee and employee.pan
+            else "N/A"
+        ),
+        "email": user.email if user else None,
+        "mobile": user.mobile if user else None,
+        "utr_number": payment.upi_txn_utr or "",
+        "amount": float(payment.amount or 0),
+        "status": payment.status or "pending",
+        "created_at": (
+            payment.created_at.isoformat()
+            if payment.created_at
+            else None
+        ),
+        "approved_at": (
+            payment.approved_at.isoformat()
+            if payment.approved_at
+            else None
+        ),
+    }
+
+
+def _admin_live_incomplete_row(
+    session: VisitorSession,
+    employee: Optional[EmployeeDetail],
+) -> dict:
+    snapshot = session.form_snapshot_json or {}
+
+    return {
+        "session_id": session.id,
+        "user_id": session.user_id,
+        "name": (
+            employee.name
+            if employee and employee.name
+            else snapshot.get("name")
+        ),
+        "email": session.email,
+        "mobile": session.mobile,
+        "current_page": session.current_page,
+        "current_step": session.current_step,
+        "last_completed_step": session.last_completed_step,
+        "progress_percent": int(session.progress_percent or 0),
+        "application_status": session.application_status,
+        "payment_status": session.payment_status,
+        "reminder_status": session.reminder_status,
+        "last_seen_at": (
+            session.last_seen_at.isoformat()
+            if session.last_seen_at
+            else None
+        ),
+    }
+
+
+@app.get("/api/admin/dashboard/live")
+def admin_dashboard_live(
+    admin_session: str = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Authenticated live snapshot for the admin dashboard.
+
+    The browser polls this endpoint in the background and updates only
+    changed counters/tables. The page itself is never reloaded, so typing
+    into admin settings is not interrupted and unsaved values are safe.
+    """
+
+    require_admin_session(admin_session)
+
+    payments = (
+        db.query(Payment)
+        .order_by(Payment.created_at.desc())
+        .all()
+    )
+
+    visitor_sessions = (
+        db.query(VisitorSession)
+        .order_by(VisitorSession.last_seen_at.desc())
+        .all()
+    )
+
+    # Batch related user/employee lookups. This endpoint runs repeatedly,
+    # so avoid two extra SQL queries for every payment/session row.
+    related_user_ids = {
+        item.user_id
+        for item in payments
+        if item.user_id
+    }
+    related_user_ids.update(
+        item.user_id
+        for item in visitor_sessions
+        if item.user_id
+    )
+
+    users_by_id = {}
+    employees_by_user_id = {}
+
+    if related_user_ids:
+        users_by_id = {
+            item.id: item
+            for item in (
+                db.query(User)
+                .filter(User.id.in_(related_user_ids))
+                .all()
+            )
+        }
+
+        employees_by_user_id = {
+            item.user_id: item
+            for item in (
+                db.query(EmployeeDetail)
+                .filter(EmployeeDetail.user_id.in_(related_user_ids))
+                .all()
+            )
+        }
+
+    payment_rows = [
+        _admin_live_payment_row(
+            payment,
+            users_by_id.get(payment.user_id),
+            employees_by_user_id.get(payment.user_id),
+        )
+        for payment in payments
+    ]
+
+    pending_count = sum(
+        1 for item in payment_rows
+        if item["status"] == "pending"
+    )
+    approved_count = sum(
+        1 for item in payment_rows
+        if item["status"] == "approved"
+    )
+    rejected_count = sum(
+        1 for item in payment_rows
+        if item["status"] == "rejected"
+    )
+    total_revenue = sum(
+        float(item["amount"] or 0)
+        for item in payment_rows
+        if item["status"] == "approved"
+    )
+
+    incomplete_rows = []
+
+    for session in visitor_sessions:
+        if session.application_status == "completed":
+            continue
+
+        if session.payment_status == "approved":
+            continue
+
+        incomplete_rows.append(
+            _admin_live_incomplete_row(
+                session,
+                employees_by_user_id.get(session.user_id),
+            )
+        )
+
+    unique_visitors = (
+        db.query(VisitorSession.visitor_id)
+        .distinct()
+        .count()
+    )
+
+    form_started = db.query(VisitorSession).count()
+
+    payment_page_count = (
+        db.query(VisitorSession)
+        .filter(VisitorSession.progress_percent >= 80)
+        .count()
+    )
+
+    admin_generated_count = (
+        db.query(Form16Generation)
+        .filter(Form16Generation.source == "admin")
+        .count()
+    )
+
+    email_sent_count = (
+        db.query(EmailDelivery)
+        .filter(EmailDelivery.status == "sent")
+        .count()
+    )
+
+    email_failed_count = (
+        db.query(EmailDelivery)
+        .filter(EmailDelivery.status == "failed")
+        .count()
+    )
+
+    settings = db.query(AdminSettings).first()
+    financial_year = (
+        settings.financial_year
+        if settings and settings.financial_year
+        else None
+    )
+
+    assessment_year = None
+    if financial_year:
+        try:
+            assessment_year = assessment_year_from_financial_year(
+                financial_year
+            )
+        except ValueError:
+            assessment_year = None
+
+    return {
+        "server_time": datetime.utcnow().isoformat(),
+        "financial_year": financial_year,
+        "assessment_year": assessment_year,
+        "payments": payment_rows,
+        "incomplete_users": incomplete_rows,
+        "stats": {
+            "total_users": db.query(User).count(),
+            "unique_visitors": unique_visitors,
+            "form_started": form_started,
+            "incomplete_users": len(incomplete_rows),
+            "payment_page_reached": payment_page_count,
+            "total_revenue": total_revenue,
+            "pending_payments": pending_count,
+            "approved_payments": approved_count,
+            "rejected_payments": rejected_count,
+            "admin_generated": admin_generated_count,
+            "email_sent": email_sent_count,
+            "email_failed": email_failed_count,
+        },
+    }
+
+
+# =========================================================
 # ADMIN PAYMENT ACTIONS
 # =========================================================
 
