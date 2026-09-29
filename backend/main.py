@@ -1100,6 +1100,25 @@ class LedgerSchema(BaseModel):
     flags: list[str] = Field(default_factory=list)
 
 
+class ArrearLedgerSchema(BaseModel):
+    user_id: str
+
+    # Arrear belongs to the Form-16 cycle in which it was actually
+    # paid/disbursed, not necessarily the old period printed on the bill.
+    payment_month: int = Field(..., ge=1, le=12)
+    payment_year: int
+
+    original_period: str
+    gross_salary: float = Field(default=0, ge=0)
+
+    line_items: Dict[str, Any] = Field(default_factory=dict)
+    deductions: Dict[str, Any] = Field(default_factory=dict)
+
+    bill_no: Optional[str] = None
+    note: Optional[str] = None
+    flags: list[str] = Field(default_factory=list)
+
+
 class FinancialYearSchema(BaseModel):
     financial_year: str
 
@@ -1787,6 +1806,147 @@ async def extract_salary_slip(
 # MONTHLY LEDGER
 # =========================================================
 
+def _numeric_amount_map(values: Optional[dict]) -> dict:
+    """Keep only finite numeric values from a client supplied amount map."""
+    result = {}
+
+    for raw_key, raw_value in (values or {}).items():
+        key = re.sub(r"[^a-z0-9_]+", "_", str(raw_key).strip().lower())
+        key = key.strip("_")
+        if not key:
+            continue
+
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+
+        # NaN is the only normal float that is not equal to itself.
+        if value != value:
+            continue
+
+        result[key] = round(value, 2)
+
+    return result
+
+
+def _merge_amount_maps(base: Optional[dict], extra: Optional[dict]) -> dict:
+    """Merge numeric amount maps, adding duplicate keys instead of losing money."""
+    result = _numeric_amount_map(base)
+
+    for key, value in _numeric_amount_map(extra).items():
+        result[key] = round(float(result.get(key, 0)) + value, 2)
+
+    return result
+
+
+def _merge_unique_flags(*flag_groups) -> list[str]:
+    result = []
+    seen = set()
+
+    for group in flag_groups:
+        for raw_flag in (group or []):
+            flag = str(raw_flag).strip()
+            if not flag or flag in seen:
+                continue
+            seen.add(flag)
+            result.append(flag)
+
+    return result
+
+
+def _append_ledger_note(existing_note: Optional[str], new_note: Optional[str]) -> Optional[str]:
+    parts = []
+
+    for raw in (existing_note, new_note):
+        value = (raw or "").strip()
+        if value and value not in parts:
+            parts.append(value)
+
+    return " | ".join(parts) if parts else None
+
+
+def _arrear_prefixed_amounts(values: Optional[dict]) -> dict:
+    """
+    Keep arrear components separate from regular monthly Basic/DA/HRA.
+    Example: basic_pay -> arrear_basic_pay.
+    """
+    result = {}
+
+    for key, value in _numeric_amount_map(values).items():
+        target_key = key if key.startswith("arrear_") else f"arrear_{key}"
+        result[target_key] = value
+
+    return result
+
+
+def _arrear_gross_from_flags(flags: Optional[list]) -> float:
+    """Recover arrear gross already merged into a month during safe replacement."""
+    total = 0.0
+
+    for raw_flag in (flags or []):
+        flag = str(raw_flag)
+        if not flag.startswith("arrear_gross:"):
+            continue
+
+        # Format: arrear_gross:<amount>:<fingerprint>
+        parts = flag.split(":", 2)
+        if len(parts) < 2:
+            continue
+
+        try:
+            total += float(parts[1])
+        except (TypeError, ValueError):
+            continue
+
+    return round(total, 2)
+
+
+def _arrear_only_amounts(values: Optional[dict]) -> dict:
+    return {
+        key: value
+        for key, value in _numeric_amount_map(values).items()
+        if key.startswith("arrear_")
+    }
+
+
+def _arrear_only_flags(flags: Optional[list]) -> list[str]:
+    prefixes = (
+        "contains_arrear",
+        "arrear_fingerprint:",
+        "arrear_gross:",
+        "arrear_original_period:",
+        "arrear_payment_month:",
+        "arrear_bill_no:",
+    )
+
+    return [
+        str(flag)
+        for flag in (flags or [])
+        if str(flag).startswith(prefixes)
+    ]
+
+
+def _arrear_fingerprint(
+    user_id: str,
+    original_period: str,
+    payment_month: int,
+    payment_year: int,
+    gross_salary: float,
+    bill_no: Optional[str],
+) -> str:
+    raw = "|".join(
+        [
+            user_id.strip(),
+            original_period.strip().lower(),
+            f"{payment_year:04d}-{payment_month:02d}",
+            f"{gross_salary:.2f}",
+            (bill_no or "").strip().lower(),
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20]
+
+
 @app.post(
     "/api/ledger/save",
     status_code=status.HTTP_201_CREATED,
@@ -1796,9 +1956,11 @@ def save_monthly_ledger(
     db: Session = Depends(get_db),
 ):
 
+    user_id = ledger_data.user_id.strip()
+
     user = (
         db.query(User)
-        .filter(User.id == ledger_data.user_id)
+        .filter(User.id == user_id)
         .first()
     )
 
@@ -1808,6 +1970,17 @@ def save_monthly_ledger(
             detail="User not found.",
         )
 
+    source = (ledger_data.source or "extracted").strip().lower()
+
+    if source == "arrear":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Arrear must be saved through /api/ledger/save-arrear "
+                "with its actual payment/disbursement month and year."
+            ),
+        )
+
     financial_year = get_active_financial_year(db)
 
     if not month_belongs_to_financial_year(
@@ -1815,7 +1988,6 @@ def save_monthly_ledger(
         ledger_data.year,
         financial_year,
     ):
-
         raise HTTPException(
             status_code=400,
             detail=(
@@ -1829,122 +2001,155 @@ def save_monthly_ledger(
         ledger_data.month,
     )
 
+    incoming_line_items = _numeric_amount_map(ledger_data.line_items)
+    incoming_deductions = _numeric_amount_map(ledger_data.deductions)
+    incoming_flags = _merge_unique_flags(ledger_data.flags)
+
     existing = (
         db.query(MonthlyLedger)
         .filter(
-            MonthlyLedger.user_id
-            == ledger_data.user_id,
-
-            MonthlyLedger.month_year
-            == month_year,
+            MonthlyLedger.user_id == user_id,
+            MonthlyLedger.month_year == month_year,
         )
         .first()
     )
 
     if existing:
+        existing_flags = list(existing.flags or [])
+        arrear_gross = _arrear_gross_from_flags(existing_flags)
+        arrear_line_items = _arrear_only_amounts(existing.line_items_json)
+        arrear_deductions = _arrear_only_amounts(existing.deductions_json)
+        arrear_flags = _arrear_only_flags(existing_flags)
+        has_arrear = arrear_gross > 0 or bool(arrear_flags)
 
-        # Actual salary slip overrides an auto-generated
-        # January/February projection.
-
+        # Actual salary slip replaces an auto-generated Jan/Feb projection,
+        # but any arrear already received in that payment month is preserved.
         if (
             existing.is_auto_generated
-            and ledger_data.source != "auto_generated"
+            and source != "auto_generated"
         ):
-
             existing.month = ledger_data.month
             existing.year = ledger_data.year
             existing.financial_year = financial_year
 
-            existing.basic_pay = ledger_data.basic_pay
-            existing.da = ledger_data.da
-            existing.hra = ledger_data.hra
-
-            existing.gross_salary = (
-                ledger_data.gross_salary
+            existing.basic_pay = float(ledger_data.basic_pay or 0)
+            existing.da = float(ledger_data.da or 0)
+            existing.hra = float(ledger_data.hra or 0)
+            existing.gross_salary = round(
+                float(ledger_data.gross_salary or 0) + arrear_gross,
+                2,
             )
 
-            existing.line_items_json = dict(
-                ledger_data.line_items
-            )
+            existing.line_items_json = {
+                **incoming_line_items,
+                **arrear_line_items,
+            }
+            existing.deductions_json = {
+                **incoming_deductions,
+                **arrear_deductions,
+            }
 
-            existing.deductions_json = dict(
-                ledger_data.deductions
-            )
-
-            existing.source = ledger_data.source
+            existing.source = source
             existing.is_auto_generated = False
-
-            existing.note = ledger_data.note
-            existing.flags = list(ledger_data.flags)
+            existing.note = _append_ledger_note(
+                existing.note if has_arrear else None,
+                ledger_data.note,
+            )
+            existing.flags = _merge_unique_flags(
+                incoming_flags,
+                arrear_flags,
+            )
 
             db.commit()
             db.refresh(existing)
 
             return {
                 "message": (
-                    "Actual salary slip replaced "
-                    "the auto-generated projection."
+                    "Actual salary slip replaced the auto-generated projection"
+                    + (" and preserved arrear." if has_arrear else ".")
                 ),
                 "ledger_id": existing.id,
                 "month_year": month_year,
                 "financial_year": financial_year,
+                "contains_arrear": has_arrear,
+            }
+
+        # If an arrear was stored before the ordinary salary slip for the same
+        # payment month, merge the regular salary into that row instead of
+        # rejecting it as a duplicate. This avoids losing either amount.
+        if existing.source == "arrear" and source != "auto_generated":
+            existing.basic_pay = float(ledger_data.basic_pay or 0)
+            existing.da = float(ledger_data.da or 0)
+            existing.hra = float(ledger_data.hra or 0)
+            existing.gross_salary = round(
+                float(ledger_data.gross_salary or 0) + arrear_gross,
+                2,
+            )
+            existing.line_items_json = {
+                **incoming_line_items,
+                **arrear_line_items,
+            }
+            existing.deductions_json = {
+                **incoming_deductions,
+                **arrear_deductions,
+            }
+            existing.source = source
+            existing.is_auto_generated = False
+            existing.note = _append_ledger_note(
+                existing.note,
+                ledger_data.note,
+            )
+            existing.flags = _merge_unique_flags(
+                incoming_flags,
+                arrear_flags,
+            )
+
+            db.commit()
+            db.refresh(existing)
+
+            return {
+                "message": "Regular salary merged with the arrear payment month.",
+                "ledger_id": existing.id,
+                "month_year": month_year,
+                "financial_year": financial_year,
+                "contains_arrear": True,
             }
 
         raise HTTPException(
             status_code=400,
             detail=(
-                f"Ledger entry for {month_year} "
-                "already exists."
+                f"Ledger entry for {month_year} already exists."
             ),
         )
 
     new_ledger = MonthlyLedger(
         id=str(uuid.uuid4()),
-        user_id=ledger_data.user_id,
-
+        user_id=user_id,
         month=ledger_data.month,
         year=ledger_data.year,
-
         month_year=month_year,
         financial_year=financial_year,
-
-        basic_pay=ledger_data.basic_pay,
-        da=ledger_data.da,
-        hra=ledger_data.hra,
-        gross_salary=ledger_data.gross_salary,
-
-        source=ledger_data.source,
-
-        is_auto_generated=(
-            ledger_data.source == "auto_generated"
-        ),
-
-        line_items_json=dict(
-            ledger_data.line_items
-        ),
-
-        deductions_json=dict(
-            ledger_data.deductions
-        ),
-
+        basic_pay=float(ledger_data.basic_pay or 0),
+        da=float(ledger_data.da or 0),
+        hra=float(ledger_data.hra or 0),
+        gross_salary=float(ledger_data.gross_salary or 0),
+        source=source,
+        is_auto_generated=(source == "auto_generated"),
+        line_items_json=incoming_line_items,
+        deductions_json=incoming_deductions,
         note=ledger_data.note,
-        flags=list(ledger_data.flags),
+        flags=incoming_flags,
     )
 
     db.add(new_ledger)
 
     try:
         db.commit()
-
     except IntegrityError:
         db.rollback()
-
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Ledger entry for {month_year} "
-                "already exists."
-            ),
+            detail=f"Ledger entry for {month_year} already exists.",
         )
 
     db.refresh(new_ledger)
@@ -1954,6 +2159,218 @@ def save_monthly_ledger(
         "ledger_id": new_ledger.id,
         "month_year": month_year,
         "financial_year": financial_year,
+        "contains_arrear": False,
+    }
+
+
+@app.post(
+    "/api/ledger/save-arrear",
+    status_code=status.HTTP_201_CREATED,
+)
+def save_arrear_ledger(
+    arrear_data: ArrearLedgerSchema,
+    db: Session = Depends(get_db),
+):
+    """
+    Store arrear by the month in which it was ACTUALLY paid/disbursed.
+
+    The old salary period is preserved as metadata only. It is never used to
+    decide the Form-16 FY, because doing so can silently move arrear income to
+    the wrong tax cycle.
+    """
+    user_id = arrear_data.user_id.strip()
+    original_period = arrear_data.original_period.strip()
+    bill_no = (arrear_data.bill_no or "").strip() or None
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User ID is required.")
+
+    if not original_period:
+        raise HTTPException(
+            status_code=400,
+            detail="Original arrear period is required.",
+        )
+
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    financial_year = get_active_financial_year(db)
+
+    if not month_belongs_to_financial_year(
+        arrear_data.payment_month,
+        arrear_data.payment_year,
+        financial_year,
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The arrear payment/disbursement month "
+                f"{arrear_data.payment_month}/{arrear_data.payment_year} "
+                f"does not belong to the selected FY {financial_year}. "
+                "Select the FY in which the arrear was actually paid."
+            ),
+        )
+
+    line_items = _numeric_amount_map(arrear_data.line_items)
+    deductions = _numeric_amount_map(arrear_data.deductions)
+
+    gross_salary = round(float(arrear_data.gross_salary or 0), 2)
+    component_total = round(sum(line_items.values()), 2)
+
+    if gross_salary <= 0 and component_total > 0:
+        gross_salary = component_total
+
+    if gross_salary <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Arrear gross amount must be greater than zero.",
+        )
+
+    payment_month_year = month_year_string(
+        arrear_data.payment_year,
+        arrear_data.payment_month,
+    )
+
+    fingerprint = _arrear_fingerprint(
+        user_id=user_id,
+        original_period=original_period,
+        payment_month=arrear_data.payment_month,
+        payment_year=arrear_data.payment_year,
+        gross_salary=gross_salary,
+        bill_no=bill_no,
+    )
+
+    fingerprint_flag = f"arrear_fingerprint:{fingerprint}"
+    gross_flag = f"arrear_gross:{gross_salary:.2f}:{fingerprint}"
+
+    metadata_flags = _merge_unique_flags(
+        arrear_data.flags,
+        [
+            "contains_arrear",
+            fingerprint_flag,
+            gross_flag,
+            f"arrear_original_period:{original_period}",
+            f"arrear_payment_month:{payment_month_year}",
+        ],
+        [f"arrear_bill_no:{bill_no}"] if bill_no else [],
+    )
+
+    arrear_note = (
+        f"Arrear for {original_period}; actually paid/disbursed in "
+        f"{payment_month_year}; included in FY {financial_year}."
+    )
+    arrear_note = _append_ledger_note(arrear_note, arrear_data.note)
+
+    prefixed_line_items = _arrear_prefixed_amounts(line_items)
+    prefixed_deductions = _arrear_prefixed_amounts(deductions)
+
+    existing = (
+        db.query(MonthlyLedger)
+        .filter(
+            MonthlyLedger.user_id == user_id,
+            MonthlyLedger.month_year == payment_month_year,
+        )
+        .first()
+    )
+
+    if existing:
+        existing_flags = list(existing.flags or [])
+
+        # Safe retry: never add the same arrear twice after a network refresh.
+        if fingerprint_flag in existing_flags:
+            return {
+                "message": "This arrear is already stored.",
+                "ledger_id": existing.id,
+                "month_year": payment_month_year,
+                "financial_year": financial_year,
+                "arrear_fingerprint": fingerprint,
+                "already_saved": True,
+            }
+
+        existing.gross_salary = round(
+            float(existing.gross_salary or 0) + gross_salary,
+            2,
+        )
+        existing.line_items_json = _merge_amount_maps(
+            existing.line_items_json,
+            prefixed_line_items,
+        )
+        existing.deductions_json = _merge_amount_maps(
+            existing.deductions_json,
+            prefixed_deductions,
+        )
+        existing.note = _append_ledger_note(existing.note, arrear_note)
+        existing.flags = _merge_unique_flags(existing_flags, metadata_flags)
+
+        # Keep a real/auto regular salary source if one already exists. If the
+        # row contains only arrear, mark it explicitly so automation won't use
+        # it as a clean ordinary salary month.
+        if not existing.source:
+            existing.source = "arrear"
+
+        db.commit()
+        db.refresh(existing)
+
+        return {
+            "message": "Arrear merged into its actual payment month.",
+            "ledger_id": existing.id,
+            "month_year": payment_month_year,
+            "financial_year": financial_year,
+            "arrear_fingerprint": fingerprint,
+            "already_saved": False,
+        }
+
+    new_ledger = MonthlyLedger(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        month=arrear_data.payment_month,
+        year=arrear_data.payment_year,
+        month_year=payment_month_year,
+        financial_year=financial_year,
+
+        # Do not pretend an old-period arrear is the ordinary Basic/DA/HRA of
+        # the payment month. The components stay in arrear_* line items.
+        basic_pay=0,
+        da=0,
+        hra=0,
+        gross_salary=gross_salary,
+        source="arrear",
+        is_auto_generated=False,
+        line_items_json=prefixed_line_items,
+        deductions_json=prefixed_deductions,
+        note=arrear_note,
+        flags=metadata_flags,
+    )
+
+    db.add(new_ledger)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The payment-month ledger changed while the arrear was being "
+                "saved. Please retry once; the endpoint is idempotent."
+            ),
+        )
+
+    db.refresh(new_ledger)
+
+    return {
+        "message": "Arrear stored against its actual payment month.",
+        "ledger_id": new_ledger.id,
+        "month_year": payment_month_year,
+        "financial_year": financial_year,
+        "arrear_fingerprint": fingerprint,
+        "already_saved": False,
     }
 
 
@@ -2982,4 +3399,3 @@ def download_pdf(
         filename=filename,
         media_type="application/pdf",
     )
-
