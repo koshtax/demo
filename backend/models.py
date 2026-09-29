@@ -35,8 +35,12 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True)
+
+    # Contact details are stored here permanently.
+    # The user-flow pages/main.py will be updated later to actually persist them.
     email = Column(String, unique=True, index=True, nullable=True)
     mobile = Column(String, unique=True, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     ledgers = relationship(
@@ -50,6 +54,26 @@ class User(Base):
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",
+    )
+
+    payments = relationship(
+        "Payment",
+        back_populates="user",
+    )
+
+    visitor_sessions = relationship(
+        "VisitorSession",
+        back_populates="user",
+    )
+
+    form16_generations = relationship(
+        "Form16Generation",
+        back_populates="user",
+    )
+
+    email_deliveries = relationship(
+        "EmailDelivery",
+        back_populates="user",
     )
 
 
@@ -226,6 +250,325 @@ class Payment(Base):
     approved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    user = relationship(
+        "User",
+        back_populates="payments",
+    )
+
+    form16_generations = relationship(
+        "Form16Generation",
+        back_populates="payment",
+    )
+
+    email_deliveries = relationship(
+        "EmailDelivery",
+        back_populates="payment",
+    )
+
+
+class VisitorSession(Base):
+    """
+    Tracks one user journey through the Form-16 flow.
+
+    visitor_id is the stable browser-level identifier used for unique-visitor
+    analytics. id is one specific application/session journey. A returning
+    browser can therefore have multiple journeys without inflating the unique
+    visitor count.
+    """
+
+    __tablename__ = "visitor_sessions"
+
+    id = Column(String, primary_key=True)
+
+    visitor_id = Column(
+        String,
+        nullable=False,
+        index=True,
+    )
+
+    user_id = Column(
+        String,
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+
+    # Captured as soon as the user supplies contact information, even if the
+    # application is abandoned before the full EmployeeDetail is completed.
+    email = Column(String, nullable=True, index=True)
+    mobile = Column(String, nullable=True)
+
+    # Examples:
+    # upload / review / ddo_details / payment / payment_wait / completed
+    current_page = Column(String, nullable=True, index=True)
+    current_step = Column(String, nullable=True)
+    last_completed_step = Column(String, nullable=True)
+    progress_percent = Column(Integer, default=0)
+
+    # in_progress / payment_pending / payment_submitted / completed / abandoned
+    application_status = Column(
+        String,
+        nullable=False,
+        default="in_progress",
+        index=True,
+    )
+
+    # not_started / pending / approved / rejected
+    payment_status = Column(
+        String,
+        nullable=False,
+        default="not_started",
+        index=True,
+    )
+
+    # Only a whitelisted partial snapshot should be stored by main.py.
+    # Never place passwords, raw PDF bytes, card details or UPI PINs here.
+    form_snapshot_json = Column(JSON, default=dict)
+
+    # Used for a secure resume link. main.py will generate a random token.
+    resume_token = Column(
+        String,
+        unique=True,
+        nullable=True,
+        index=True,
+    )
+
+    # Service-email/reminder consent captured in the UI.
+    email_contact_consent = Column(Boolean, default=False)
+
+    # not_eligible / pending / sent / failed / cancelled
+    reminder_status = Column(
+        String,
+        nullable=False,
+        default="not_eligible",
+        index=True,
+    )
+
+    reminder_due_at = Column(DateTime, nullable=True, index=True)
+    reminder_sent_at = Column(DateTime, nullable=True)
+
+    started_at = Column(DateTime, default=datetime.utcnow, index=True)
+    last_seen_at = Column(DateTime, default=datetime.utcnow, index=True)
+    completed_at = Column(DateTime, nullable=True)
+    abandoned_at = Column(DateTime, nullable=True)
+
+    user = relationship(
+        "User",
+        back_populates="visitor_sessions",
+    )
+
+    events = relationship(
+        "VisitorEvent",
+        back_populates="visitor_session",
+        cascade="all, delete-orphan",
+    )
+
+    email_deliveries = relationship(
+        "EmailDelivery",
+        back_populates="visitor_session",
+    )
+
+
+class VisitorEvent(Base):
+    """
+    Append-only funnel/event history for analytics.
+
+    Typical event_type values:
+    page_view / form_started / contact_saved / step_completed /
+    payment_submitted / payment_approved / payment_rejected /
+    form16_generated / form16_downloaded
+    """
+
+    __tablename__ = "visitor_events"
+
+    id = Column(String, primary_key=True)
+
+    session_id = Column(
+        String,
+        ForeignKey("visitor_sessions.id"),
+        nullable=False,
+        index=True,
+    )
+
+    # Denormalised for fast unique-visitor/funnel queries.
+    visitor_id = Column(String, nullable=False, index=True)
+
+    user_id = Column(
+        String,
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+
+    event_type = Column(String, nullable=False, index=True)
+    page_name = Column(String, nullable=True, index=True)
+    step_name = Column(String, nullable=True)
+
+    # Keep this metadata minimal and non-sensitive.
+    event_data_json = Column(JSON, default=dict)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    visitor_session = relationship(
+        "VisitorSession",
+        back_populates="events",
+    )
+
+
+class Form16Generation(Base):
+    """
+    Permanent audit record for every Form 16 generation.
+
+    source distinguishes normal paid-user generation from direct admin
+    generation, so admin-generated documents never need fake payment records.
+    """
+
+    __tablename__ = "form16_generations"
+
+    id = Column(String, primary_key=True)
+
+    user_id = Column(
+        String,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    payment_id = Column(
+        String,
+        ForeignKey("payments.id"),
+        nullable=True,
+        index=True,
+    )
+
+    financial_year = Column(String, nullable=False, index=True)
+    assessment_year = Column(String, nullable=True)
+
+    # user_payment / admin
+    source = Column(String, nullable=False, index=True)
+
+    # queued / generating / generated / failed
+    status = Column(
+        String,
+        nullable=False,
+        default="queued",
+        index=True,
+    )
+
+    file_name = Column(String, nullable=True)
+    error_message = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    generated_at = Column(DateTime, nullable=True)
+
+    download_count = Column(Integer, default=0)
+    first_downloaded_at = Column(DateTime, nullable=True)
+    last_downloaded_at = Column(DateTime, nullable=True)
+
+    user = relationship(
+        "User",
+        back_populates="form16_generations",
+    )
+
+    payment = relationship(
+        "Payment",
+        back_populates="form16_generations",
+    )
+
+    email_deliveries = relationship(
+        "EmailDelivery",
+        back_populates="generation",
+    )
+
+
+class EmailDelivery(Base):
+    """
+    Email queue/audit table for both transactional and reminder emails.
+
+    Typical email_type values:
+    abandoned_reminder / payment_confirmed_form16 / admin_generated_form16
+    """
+
+    __tablename__ = "email_deliveries"
+
+    id = Column(String, primary_key=True)
+
+    user_id = Column(
+        String,
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+
+    visitor_session_id = Column(
+        String,
+        ForeignKey("visitor_sessions.id"),
+        nullable=True,
+        index=True,
+    )
+
+    payment_id = Column(
+        String,
+        ForeignKey("payments.id"),
+        nullable=True,
+        index=True,
+    )
+
+    generation_id = Column(
+        String,
+        ForeignKey("form16_generations.id"),
+        nullable=True,
+        index=True,
+    )
+
+    recipient_email = Column(String, nullable=False, index=True)
+    email_type = Column(String, nullable=False, index=True)
+    subject = Column(String, nullable=True)
+
+    # queued / sending / sent / failed / cancelled
+    status = Column(
+        String,
+        nullable=False,
+        default="queued",
+        index=True,
+    )
+
+    scheduled_for = Column(DateTime, nullable=True, index=True)
+    attempt_count = Column(Integer, default=0)
+
+    provider_message_id = Column(String, nullable=True)
+    error_message = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    sent_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+
+    user = relationship(
+        "User",
+        back_populates="email_deliveries",
+    )
+
+    visitor_session = relationship(
+        "VisitorSession",
+        back_populates="email_deliveries",
+    )
+
+    payment = relationship(
+        "Payment",
+        back_populates="email_deliveries",
+    )
+
+    generation = relationship(
+        "Form16Generation",
+        back_populates="email_deliveries",
+    )
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -275,7 +618,7 @@ if __name__ == "__main__":
         cached_employer.officer_father_name,
     )
 
-    # TEST 2: Exact month/year ledger identity + dynamic Medical storage.
+    # TEST 2: User contact storage + exact month/year ledger identity.
     user_id = str(uuid.uuid4())
 
     session.add(
@@ -338,9 +681,107 @@ if __name__ == "__main__":
         saved_ledger.line_items_json.get("medical"),
     )
 
+    # TEST 3: Visitor journey + funnel event.
+    visitor_id = str(uuid.uuid4())
+    visitor_session_id = str(uuid.uuid4())
+
+    journey = VisitorSession(
+        id=visitor_session_id,
+        visitor_id=visitor_id,
+        user_id=user_id,
+        email="test@test.com",
+        mobile="9999999999",
+        current_page="review",
+        current_step="contact_details",
+        last_completed_step="salary_upload",
+        progress_percent=40,
+        application_status="in_progress",
+        payment_status="not_started",
+        email_contact_consent=True,
+        reminder_status="pending",
+        resume_token=uuid.uuid4().hex,
+        form_snapshot_json={
+            "name": "Test Employee",
+            "office_school_name": "Test School",
+        },
+    )
+
+    session.add(journey)
+    session.flush()
+
+    session.add(
+        VisitorEvent(
+            id=str(uuid.uuid4()),
+            session_id=visitor_session_id,
+            visitor_id=visitor_id,
+            user_id=user_id,
+            event_type="step_completed",
+            page_name="review",
+            step_name="contact_details",
+        )
+    )
+
+    session.commit()
+
     print(
-        "✓ Source:",
-        saved_ledger.source,
+        "✓ Visitor journey:",
+        journey.current_page,
+        "| Progress:",
+        journey.progress_percent,
+    )
+
+    # TEST 4: Payment-backed Form 16 generation + email audit record.
+    payment_id = str(uuid.uuid4())
+
+    payment = Payment(
+        id=payment_id,
+        user_id=user_id,
+        amount=150.0,
+        upi_txn_utr="TEST-UTR-001",
+        status="approved",
+        approved_at=datetime.utcnow(),
+    )
+
+    session.add(payment)
+    session.flush()
+
+    generation_id = str(uuid.uuid4())
+
+    generation = Form16Generation(
+        id=generation_id,
+        user_id=user_id,
+        payment_id=payment_id,
+        financial_year="2025-26",
+        assessment_year="2026-27",
+        source="user_payment",
+        status="generated",
+        file_name="Form_16_Test_Employee_FY_2025-26.pdf",
+        generated_at=datetime.utcnow(),
+    )
+
+    session.add(generation)
+    session.flush()
+
+    email_delivery = EmailDelivery(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        visitor_session_id=visitor_session_id,
+        payment_id=payment_id,
+        generation_id=generation_id,
+        recipient_email="test@test.com",
+        email_type="payment_confirmed_form16",
+        subject="Payment Confirmed – Your Form 16 for FY 2025-26",
+        status="queued",
+    )
+
+    session.add(email_delivery)
+    session.commit()
+
+    print(
+        "✓ Form 16 generation:",
+        generation.source,
+        "| Email:",
+        email_delivery.status,
     )
 
     session.close()
