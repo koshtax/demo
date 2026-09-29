@@ -207,14 +207,14 @@
   }
 
   .p2-top td {
-    height: 7.5mm;
-    padding: 0.95mm 1mm;
+    height: 7.2mm;
+    padding: 0.85mm 0.95mm;
   }
 
   .p2-top .cit-box {
     line-height: 1.4;
     vertical-align: top;
-    height: 16mm;
+    height: 15mm;
   }
 
   .period-grid td,
@@ -239,11 +239,12 @@
   }
 
   .p2-summary td {
-    height: 6.1mm;
+    height: 5.8mm;
+    padding: 0.65mm 0.8mm;
   }
 
   .p2-section {
-    margin-top: 1mm;
+    margin-top: 0.8mm;
   }
 
   .p2-section-title {
@@ -251,16 +252,16 @@
     border-bottom: 0;
     text-align: center;
     font-weight: 700;
-    padding: 1.2mm;
-    font-size: 7.3pt;
+    padding: 1.0mm;
+    font-size: 7.15pt;
   }
 
   .p2-section-note {
     border: 0.5pt solid #111;
     border-top: 0;
     text-align: center;
-    font-size: 6.6pt;
-    padding: 1mm;
+    font-size: 6.45pt;
+    padding: 0.8mm;
   }
 
   .p2-grid {
@@ -268,13 +269,13 @@
   }
 
   .p2-grid th {
-    height: 6.8mm;
-    padding: 0.65mm 0.7mm;
+    height: 6.2mm;
+    padding: 0.55mm 0.65mm;
   }
 
   .p2-grid td {
-    height: 4.4mm;
-    padding: 0.45mm 0.65mm;
+    height: 4.05mm;
+    padding: 0.38mm 0.6mm;
   }
 
   .p2-grid .sl {
@@ -292,21 +293,21 @@
   }
 
   .verification {
-    margin-top: 1.2mm;
-    font-size: 7.25pt;
+    margin-top: 0.9mm;
+    font-size: 7.1pt;
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
   .verify-text {
-    height: 20mm;
+    height: 17.5mm;
     vertical-align: top;
-    line-height: 1.35;
+    line-height: 1.30;
   }
 
   .bottom-sign td {
-    height: 7.5mm;
-    padding: 0.7mm 0.8mm;
+    height: 6.9mm;
+    padding: 0.6mm 0.75mm;
   }
 
   /* =====================================================
@@ -745,264 +746,142 @@
 
 
 <!-- =========================================================
-     PAGE 4 — SALARY LEDGER
+     PAGE 4+ — SALARY LEDGER
+     Up to 20 ledger entries per landscape page.
+     More than 20 entries automatically continue on a new page.
      ========================================================= -->
+
+{% set ledger_pages = ledger_data|batch(20)|list %}
+{% if ledger_pages|length == 0 %}
+  {% set ledger_pages = [[]] %}
+{% endif %}
+
+{% for ledger_chunk in ledger_pages %}
 
 <section class="page landscape">
 
   <div class="ledger-title">
-
     वित्तीय वर्ष {{ financial_year }}
     में वेतन स्रोत से आय और कटौतियों का विवरण
-
+    {% if ledger_pages|length > 1 %}
+      <span class="small">— पृष्ठ {{ loop.index }}/{{ ledger_pages|length }}</span>
+    {% endif %}
   </div>
-
 
   <div class="ledger-subtitle">
-
-    नाम :
-    {{ employee_name }}
-
+    नाम : {{ employee_name }}
     &nbsp;&nbsp;
-
-    कार्यालय :
-    {{ office_name }}
-
+    कार्यालय : {{ office_name }}
   </div>
 
+  {% set rows_on_page = ledger_chunk|length %}
+  {% if loop.last %}
+    {% set display_rows = rows_on_page + 1 %}
+  {% else %}
+    {% set display_rows = rows_on_page %}
+  {% endif %}
 
-  <table class="ledger" style="--ledger-row-height: {{ 140 / ((ledger_data|length) + 1) }}mm;">
+  {% if ledger_pages|length == 1 %}
+    {% set ledger_row_height = 140 / (display_rows if display_rows > 0 else 1) %}
+  {% elif loop.last %}
+    {% set ledger_row_height = [140 / (display_rows if display_rows > 0 else 1), 12] | min %}
+  {% else %}
+    {% set ledger_row_height = 140 / (display_rows if display_rows > 0 else 1) %}
+  {% endif %}
+
+  <table class="ledger" style="--ledger-row-height: {{ ledger_row_height }}mm;">
 
     <thead>
-
       <tr>
-
-        <th class="month">
-          माह
-        </th>
-
-        <th class="vert">
-          मूल वेतन
-        </th>
-
-        <th class="vert">
-          महंगाई भत्ता
-        </th>
-
-        <th class="vert">
-          मकान किराया भत्ता
-        </th>
-
-        <th class="vert">
-          चिकित्सा भत्ता
-        </th>
-
-        <th class="vert">
-          यात्रा भत्ता
-        </th>
-
-        <th class="vert">
-          बकाया / Arrear
-        </th>
-
-        <th class="vert">
-          कुल सकल आय
-        </th>
-
-        <th class="vert">
-          GPF
-        </th>
-
-        <th class="vert">
-          GLI / समूह बीमा
-        </th>
-
-        <th class="vert">
-          पेशेवर कर
-        </th>
-
-        <th class="vert">
-          आयकर / TDS
-        </th>
-
-        <th class="vert">
-          कुल कटौती
-        </th>
-
-        <th class="vert">
-          शुद्ध भुगतान
-        </th>
-
+        <th class="month">माह</th>
+        <th class="vert">मूल वेतन</th>
+        <th class="vert">महंगाई भत्ता</th>
+        <th class="vert">मकान किराया भत्ता</th>
+        <th class="vert">चिकित्सा भत्ता</th>
+        <th class="vert">यात्रा भत्ता</th>
+        <th class="vert">बकाया / Arrear</th>
+        <th class="vert">कुल सकल आय</th>
+        <th class="vert">GPF</th>
+        <th class="vert">GLI / समूह बीमा</th>
+        <th class="vert">पेशेवर कर</th>
+        <th class="vert">आयकर / TDS</th>
+        <th class="vert">कुल कटौती</th>
+        <th class="vert">शुद्ध भुगतान</th>
       </tr>
-
     </thead>
-
 
     <tbody>
 
-      {% for m in ledger_data %}
-
+      {% for m in ledger_chunk %}
       <tr>
-
         <td class="text">
           {{ m.month_name }}
-          {% if m.year %}
-          {{ m.year }}
-          {% endif %}
+          {% if m.year %}{{ m.year }}{% endif %}
         </td>
-
-        <td class="num">
-          {{ m.basic }}
-        </td>
-
-        <td class="num">
-          {{ m.da }}
-        </td>
-
-        <td class="num">
-          {{ m.hra }}
-        </td>
-
-        <td class="num">
-          {{ m.medical }}
-        </td>
-
-        <td class="num">
-          {{ m.ta }}
-        </td>
-
-        <td class="num">
-          {{ m.arrear_amount }}
-        </td>
-
-        <td class="num">
-          {{ m.gross }}
-        </td>
-
-        <td class="num">
-          {{ m.gpf }}
-        </td>
-
-        <td class="num">
-          {{ m.gli }}
-        </td>
-
-        <td class="num">
-          {{ m.prof_tax }}
-        </td>
-
-        <td class="num">
-          {{ m.tds }}
-        </td>
-
-        <td class="num">
-          {{ m.total_deduction }}
-        </td>
-
-        <td class="num">
-          {{ m.net_pay }}
-        </td>
-
+        <td class="num">{{ m.basic }}</td>
+        <td class="num">{{ m.da }}</td>
+        <td class="num">{{ m.hra }}</td>
+        <td class="num">{{ m.medical }}</td>
+        <td class="num">{{ m.ta }}</td>
+        <td class="num">{{ m.arrear_amount }}</td>
+        <td class="num">{{ m.gross }}</td>
+        <td class="num">{{ m.gpf }}</td>
+        <td class="num">{{ m.gli }}</td>
+        <td class="num">{{ m.prof_tax }}</td>
+        <td class="num">{{ m.tds }}</td>
+        <td class="num">{{ m.total_deduction }}</td>
+        <td class="num">{{ m.net_pay }}</td>
       </tr>
-
       {% endfor %}
 
-
+      {% if loop.last %}
       <tr class="total">
-
-        <td>
-          योग
-        </td>
-
-        <td class="num">
-          {{ basic_amount }}
-        </td>
-
-        <td class="num">
-          {{ da_amount }}
-        </td>
-
-        <td class="num">
-          {{ hra_amount }}
-        </td>
-
-        <td class="num">
-          {{ medical_amount }}
-        </td>
-
-        <td class="num">
-          {{ ta_amount }}
-        </td>
-
-        <td class="num">
-          {{ arrear_amount }}
-        </td>
-
-        <td class="num">
-          {{ gross_salary }}
-        </td>
-
-        <td class="num">
-          {{ total_gpf }}
-        </td>
-
-        <td class="num">
-          {{ total_gli }}
-        </td>
-
-        <td class="num">
-          {{ total_prof_tax }}
-        </td>
-
-        <td class="num">
-          {{ total_tds }}
-        </td>
-
-        <td class="num">
-          {{ total_deduction }}
-        </td>
-
-        <td class="num">
-          {{ net_pay }}
-        </td>
-
+        <td>योग</td>
+        <td class="num">{{ basic_amount }}</td>
+        <td class="num">{{ da_amount }}</td>
+        <td class="num">{{ hra_amount }}</td>
+        <td class="num">{{ medical_amount }}</td>
+        <td class="num">{{ ta_amount }}</td>
+        <td class="num">{{ arrear_amount }}</td>
+        <td class="num">{{ gross_salary }}</td>
+        <td class="num">{{ total_gpf }}</td>
+        <td class="num">{{ total_gli }}</td>
+        <td class="num">{{ total_prof_tax }}</td>
+        <td class="num">{{ total_tds }}</td>
+        <td class="num">{{ total_deduction }}</td>
+        <td class="num">{{ net_pay }}</td>
       </tr>
+      {% endif %}
 
     </tbody>
-
   </table>
 
+  {% if loop.last %}
   <div class="ledger-note">
     <span class="bold">नोट:</span>
     Arrear राशि उसी माह के Gross में शामिल है जिसमें उसका वास्तविक भुगतान / disbursement दर्ज किया गया है.
     “Auto” = अनुमत Jan/Feb projection; “Combined” = संयुक्त अवधि का bill; “+Arrear” = उस payment month में arrear भी शामिल है.
   </div>
 
-
   <table class="ledger no-border">
-
     <tr class="signature">
-
       <td colspan="9"></td>
-
-      <td
-        colspan="5"
-        style="text-align:right;"
-      >
-
+      <td colspan="5" style="text-align:right;">
         कर्मचारी हस्ताक्षर
         <br><br>
-
-        दिनांक:
-        {{ generated_on }}
-
+        दिनांक: {{ generated_on }}
       </td>
-
     </tr>
-
   </table>
+  {% else %}
+  <div class="ledger-note right bold">
+    जारी / Continued on next page…
+  </div>
+  {% endif %}
 
 </section>
+
+{% endfor %}
 
 </body>
 </html>
