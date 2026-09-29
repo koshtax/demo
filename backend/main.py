@@ -511,6 +511,205 @@ def send_delivery_now(
         return False
 
 
+
+def _projection_numeric_map(values: Optional[dict]) -> dict:
+    """Return finite numeric ordinary-payroll values, excluding arrear_* metadata."""
+    result = {}
+
+    for raw_key, raw_value in (values or {}).items():
+        key = re.sub(r"[^a-z0-9_]+", "_", str(raw_key).strip().lower()).strip("_")
+        if not key or key.startswith("arrear_"):
+            continue
+
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+
+        if value != value:  # NaN guard
+            continue
+
+        result[key] = round(value, 2)
+
+    return result
+
+
+def _projection_arrear_gross(flags: Optional[list]) -> float:
+    """Recover arrear gross merged into a regular month so it is never projected forward."""
+    total = 0.0
+
+    for raw_flag in (flags or []):
+        flag = str(raw_flag)
+        if not flag.startswith("arrear_gross:"):
+            continue
+
+        parts = flag.split(":", 2)
+        if len(parts) < 2:
+            continue
+
+        try:
+            total += float(parts[1])
+        except (TypeError, ValueError):
+            continue
+
+    return round(total, 2)
+
+
+def _ensure_missing_jan_feb_projections(
+    db: Session,
+    user_id: str,
+    financial_year: str,
+) -> None:
+    """
+    Materialise only the two allowed projection months for this project cycle:
+    January and February of the FY end-year.
+
+    Rules:
+      * Never invent March-December rows.
+      * Never overwrite an actual January/February row.
+      * January is projected only from an ordinary December row.
+      * February is projected only from an ordinary January row (actual or auto).
+      * Arrear amounts merged into the source month are stripped before projection.
+      * The projected row is persisted, so PDF/email/admin generation all use the
+        same audited ledger. A later actual slip replaces it through /api/ledger/save.
+    """
+    financial_year = validate_financial_year(financial_year)
+    end_year = int(financial_year[:4]) + 1
+
+    def fetch_rows():
+        return (
+            db.query(MonthlyLedger)
+            .filter(
+                MonthlyLedger.user_id == user_id,
+                MonthlyLedger.financial_year == financial_year,
+            )
+            .all()
+        )
+
+    def find_row(rows, month, year):
+        return next(
+            (
+                row for row in rows
+                if row.month == month and row.year == year
+            ),
+            None,
+        )
+
+    def is_projection_source(row) -> bool:
+        if not row:
+            return False
+
+        source = (row.source or "").strip().lower()
+        if source in {"arrear", "combined_period"}:
+            return False
+
+        regular_gross = round(
+            float(row.gross_salary or 0)
+            - _projection_arrear_gross(row.flags),
+            2,
+        )
+
+        return regular_gross > 0
+
+    def create_projection(source_row, target_month, target_year, target_label):
+        line_items = _projection_numeric_map(source_row.line_items_json)
+        deductions = _projection_numeric_map(source_row.deductions_json)
+
+        # Keep canonical Basic/DA/HRA synchronized with the copied line-item map.
+        basic_pay = round(float(source_row.basic_pay or 0), 2)
+        da = round(float(source_row.da or 0), 2)
+        hra = round(float(source_row.hra or 0), 2)
+
+        if "basic_pay" in line_items:
+            line_items["basic_pay"] = basic_pay
+        if "da" in line_items:
+            line_items["da"] = da
+        if "hra" in line_items:
+            line_items["hra"] = hra
+
+        regular_gross = round(
+            max(
+                0.0,
+                float(source_row.gross_salary or 0)
+                - _projection_arrear_gross(source_row.flags),
+            ),
+            2,
+        )
+
+        source_month_year = source_row.month_year or month_year_string(
+            source_row.year,
+            source_row.month,
+        )
+        target_month_year = month_year_string(target_year, target_month)
+
+        note = (
+            f"{target_label} auto-projected from ordinary payroll month "
+            f"{source_month_year}. Actual {target_label} salary slip, when uploaded, "
+            "must replace this projection. Arrear amounts are never carried forward."
+        )
+
+        flags = [
+            f"auto_projection:{target_month_year}",
+            f"projection_basis:{source_month_year}",
+            "projection_actual_slip_overrides",
+        ]
+
+        if target_month == 1:
+            flags.append(
+                "january_increment_not_invented:carried_forward_from_december"
+            )
+        else:
+            flags.append(
+                "february_tds_carried_from_january:final_tax_settlement_review"
+            )
+
+        projected = MonthlyLedger(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            month=target_month,
+            year=target_year,
+            month_year=target_month_year,
+            financial_year=financial_year,
+            basic_pay=basic_pay,
+            da=da,
+            hra=hra,
+            gross_salary=regular_gross,
+            source="auto_generated",
+            is_auto_generated=True,
+            line_items_json=line_items,
+            deductions_json=deductions,
+            note=note,
+            flags=flags,
+        )
+
+        db.add(projected)
+        try:
+            db.commit()
+        except IntegrityError:
+            # A concurrent request may have created the same projection or an
+            # actual slip may have arrived. In either case, keep the winner.
+            db.rollback()
+
+    rows = fetch_rows()
+    if not rows:
+        return
+
+    # January belongs to the FY end-year and is only projected from December.
+    january = find_row(rows, 1, end_year)
+    if january is None:
+        december = find_row(rows, 12, end_year - 1)
+        if is_projection_source(december):
+            create_projection(december, 1, end_year, "January")
+            rows = fetch_rows()
+
+    # February is the final month of this March->February payroll cycle.
+    february = find_row(rows, 2, end_year)
+    if february is None:
+        january = find_row(rows, 1, end_year)
+        if is_projection_source(january):
+            create_projection(january, 2, end_year, "February")
+
+
 def build_form16_payload(
     db: Session,
     user_id: str,
@@ -545,6 +744,12 @@ def build_form16_payload(
             status_code=400,
             detail="Employer details are missing.",
         )
+
+    _ensure_missing_jan_feb_projections(
+        db,
+        user_id,
+        financial_year,
+    )
 
     ledger_rows = (
         db.query(MonthlyLedger)
