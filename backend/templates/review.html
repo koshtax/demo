@@ -179,7 +179,7 @@
             <!-- Right: Corrected Data -->
             <div class="border border-prashasan-base rounded-lg overflow-hidden shadow-sm">
                 <div class="bg-prashasan-base text-white px-4 py-2 font-medium text-sm flex justify-between items-center">
-                    <span>7th CPC Matrix Check</span>
+                    <span>Ledger Storage Treatment</span>
                     <span class="bg-prashasan-dark px-2 py-0.5 rounded text-xs" id="matrix_status">
                         Level Check
                     </span>
@@ -187,7 +187,7 @@
 
                 <div class="p-4 bg-prashasan-light">
                     <p class="text-prashasan-dark text-sm mb-1">
-                        Normalized Basic Pay (Per Month)
+                        Basic Pay Stored
                     </p>
                     <p class="text-3xl font-bold font-mono text-prashasan-dark" id="corr_basic">
                         ₹ 0.00
@@ -195,13 +195,13 @@
 
                     <ul class="mt-4 space-y-2 text-sm text-prashasan-dark font-mono">
                         <li class="flex justify-between">
-                            <span>DA (Normalized)</span>
+                            <span>DA Stored</span>
                             <span id="corr_da">₹ 0.00</span>
                         </li>
                         <li class="flex justify-between items-center">
                             <span>HRA</span>
                             <span class="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded border border-amber-200 font-sans">
-                                Review from ledger
+                                Preserved as extracted
                             </span>
                         </li>
                     </ul>
@@ -233,6 +233,13 @@
                 </tbody>
             </table>
         </div>
+
+        <div
+            id="ledger_notice"
+            class="hidden mt-4 rounded-lg border px-4 py-3 text-sm"
+            role="status"
+            aria-live="polite"
+        ></div>
 
         <div class="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center gap-4">
             <button
@@ -430,6 +437,207 @@
         return td;
     }
 
+    function isArrearSlip(slip) {
+        const period = slip && slip.period ? slip.period : {};
+        return Boolean(
+            (slip && slip.source === 'arrear') ||
+            period.is_arrear === true
+        );
+    }
+
+    function getPeriodMonths(slip) {
+        const period = slip && slip.period ? slip.period : {};
+        const rawMonths = Array.isArray(period.months) ? period.months : [];
+
+        return rawMonths
+            .map((item) => {
+                if (!Array.isArray(item) || item.length < 2) {
+                    return null;
+                }
+
+                const month = Number(item[0]);
+                const year = Number(item[1]);
+
+                if (!Number.isInteger(month) || month < 1 || month > 12) {
+                    return null;
+                }
+
+                if (!Number.isInteger(year) || year < 1900 || year > 2200) {
+                    return null;
+                }
+
+                return [month, year];
+            })
+            .filter(Boolean);
+    }
+
+    function safeNumericObject(value) {
+        const source = value && typeof value === 'object' ? value : {};
+        const result = {};
+
+        Object.entries(source).forEach(([key, rawValue]) => {
+            const number = Number(rawValue);
+            if (Number.isFinite(number)) {
+                result[key] = number;
+            }
+        });
+
+        return result;
+    }
+
+    function buildLedgerPayload(slip) {
+        const period = slip && slip.period ? slip.period : {};
+        const months = getPeriodMonths(slip);
+        const lineItems = safeNumericObject(slip && slip.line_items);
+        const deductions = safeNumericObject(slip && slip.deductions);
+        const warnings = Array.isArray(slip && slip.warnings)
+            ? slip.warnings.map((item) => String(item))
+            : [];
+
+        if (isArrearSlip(slip)) {
+            throw new Error(
+                `Arrear detected for ${period.raw || 'an unknown period'}. ` +
+                'It has NOT been dropped. The current backend needs a separate ' +
+                'arrear-payment/FY allocation step before it can be stored safely.'
+            );
+        }
+
+        if (months.length === 0) {
+            throw new Error(
+                `Salary period could not be resolved for ${period.raw || 'one extracted slip'}. ` +
+                'Please upload a slip with a clear month/year.'
+            );
+        }
+
+        const isCombined = Boolean(period.is_combined) || months.length > 1;
+
+        // IMPORTANT:
+        // A combined bill is NOT blindly divided into monthly components.
+        // We preserve the full extracted amount once, anchored to the period-end
+        // month. This keeps Form-16 income intact without inventing monthly DA/HRA.
+        const [month, year] = isCombined
+            ? months[months.length - 1]
+            : months[0];
+
+        const flags = [...warnings];
+        let note = null;
+
+        if (isCombined) {
+            flags.push(
+                'Combined-period bill preserved as one lump-sum ledger entry; monthly component split was not assumed.'
+            );
+            note = (
+                `Combined salary bill for ${period.raw || 'multiple months'} ` +
+                'preserved at the period-end month without blindly dividing Basic/DA/HRA.'
+            );
+        }
+
+        return {
+            user_id: userId,
+            month,
+            year,
+            basic_pay: Number(lineItems.basic_pay) || 0,
+            da: Number(lineItems.da) || 0,
+            hra: Number(lineItems.hra) || 0,
+            gross_salary: Number(slip && slip.gross_salary) || 0,
+            source: isCombined ? 'combined_period' : 'extracted',
+            line_items: lineItems,
+            deductions,
+            note,
+            flags
+        };
+    }
+
+    async function saveLedgerEntries() {
+        if (!Array.isArray(extractedSlips) || extractedSlips.length === 0) {
+            throw new Error('No extracted salary data is available to save.');
+        }
+
+        // Build everything before the first POST. If an arrear/invalid period is
+        // present, stop before partially saving the salary ledger.
+        const payloads = extractedSlips.map(buildLedgerPayload);
+
+        for (const payload of payloads) {
+            const response = await fetch('/api/ledger/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            let result = {};
+            try {
+                result = await response.json();
+            } catch (_) {
+                // Keep fallback message below.
+            }
+
+            if (!response.ok) {
+                const detail = String(
+                    result.detail ||
+                    'Salary ledger could not be saved.'
+                );
+
+                // Makes retry safe after a network/navigation interruption.
+                // The backend already owns this exact user + month ledger row.
+                if (response.status === 400 && detail.toLowerCase().includes('already exists')) {
+                    continue;
+                }
+
+                throw new Error(detail);
+            }
+        }
+
+        sessionStorage.setItem(
+            `salaryLedgerSaved:${userId}`,
+            new Date().toISOString()
+        );
+    }
+
+    function updateLedgerNotice(slips) {
+        const notice = getElement('ledger_notice');
+        if (!notice) {
+            return;
+        }
+
+        const hasArrear = slips.some(isArrearSlip);
+        const hasCombined = slips.some((slip) => {
+            const period = slip && slip.period ? slip.period : {};
+            return !isArrearSlip(slip) && (
+                period.is_combined === true ||
+                getPeriodMonths(slip).length > 1
+            );
+        });
+
+        notice.classList.remove(
+            'hidden',
+            'bg-red-50', 'border-red-200', 'text-red-700',
+            'bg-blue-50', 'border-blue-200', 'text-blue-700',
+            'bg-emerald-50', 'border-emerald-200', 'text-emerald-700'
+        );
+
+        if (hasArrear) {
+            notice.classList.add('bg-red-50', 'border-red-200', 'text-red-700');
+            notice.textContent =
+                'Arrear detected. It will not be silently dropped or treated as regular salary. ' +
+                'Continue will stop until the backend can store the arrear against its actual payment/disbursement FY.';
+            return;
+        }
+
+        if (hasCombined) {
+            notice.classList.add('bg-blue-50', 'border-blue-200', 'text-blue-700');
+            notice.textContent =
+                'Combined salary bill detected. The full extracted amount will be preserved once as a lump-sum ' +
+                'ledger entry at the period-end month; components will not be blindly divided across months.';
+            return;
+        }
+
+        notice.classList.add('bg-emerald-50', 'border-emerald-200', 'text-emerald-700');
+        notice.textContent =
+            'Salary periods are ready to be stored in the database when you continue.';
+    }
+
     function renderLedger(slips) {
         const tbody = getElement('ledger_tbody');
         tbody.innerHTML = '';
@@ -440,6 +648,12 @@
             const warnings = Array.isArray(slip && slip.warnings)
                 ? slip.warnings
                 : [];
+            const months = getPeriodMonths(slip);
+            const arrear = isArrearSlip(slip);
+            const combined = !arrear && (
+                period.is_combined === true ||
+                months.length > 1
+            );
 
             const tr = document.createElement('tr');
             tr.className = 'border-b border-slate-100 hover:bg-slate-50';
@@ -480,19 +694,35 @@
 
             const badge = document.createElement('span');
 
-            if (warnings.length > 0) {
+            if (arrear) {
+                badge.className = 'bg-red-100 text-red-700 text-xs px-2 py-1 rounded-full font-sans cursor-help';
+                badge.textContent = 'Arrear – FY Review';
+                badge.title = (
+                    warnings.join(' | ') ||
+                    'Arrear must be allocated using its actual payment/disbursement FY.'
+                );
+            } else if (combined) {
+                badge.className = 'bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full font-sans cursor-help';
+                badge.textContent = 'Combined – Lump Sum';
+                badge.title = (
+                    warnings.join(' | ') ||
+                    'Preserved once at the period-end month; not blindly divided.'
+                );
+            } else if (warnings.length > 0) {
                 badge.className = 'bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full font-sans cursor-help';
                 badge.textContent = '⚠ Review Needed';
                 badge.title = warnings.join(' | ');
             } else {
                 badge.className = 'bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full font-sans';
-                badge.textContent = '✓ Extracted';
+                badge.textContent = '✓ Ready';
             }
 
             statusCell.appendChild(badge);
             tr.appendChild(statusCell);
             tbody.appendChild(tr);
         });
+
+        updateLedgerNotice(slips);
     }
 
     function populateExtractedData(slips) {
@@ -513,10 +743,16 @@
         const periodLabel = period.raw || 'Unknown Period';
         getElement('orig_period').textContent = `Basic Pay (${periodLabel})`;
 
-        const isCombined = Boolean(period.is_combined);
-        getElement('bill_type').textContent = isCombined
-            ? 'Combined Bill'
-            : 'Single Month';
+        const arrear = isArrearSlip(mainSlip);
+        const months = getPeriodMonths(mainSlip);
+        const isCombined = !arrear && (
+            period.is_combined === true ||
+            months.length > 1
+        );
+
+        getElement('bill_type').textContent = arrear
+            ? 'Arrear Bill'
+            : (isCombined ? 'Combined Bill' : 'Single Month');
 
         const origBasic = Number(lineItems.basic_pay) || 0;
         const origDa = Number(lineItems.da) || 0;
@@ -526,20 +762,19 @@
         getElement('orig_da').textContent = fmt(origDa);
         getElement('orig_hra').textContent = fmt(origHra);
 
-        const months = Array.isArray(period.months) ? period.months : [];
-        const monthCount = isCombined && months.length > 0
-            ? months.length
-            : 1;
-
-        getElement('corr_basic').textContent = fmt(origBasic / monthCount);
-        getElement('corr_da').textContent = fmt(origDa / monthCount);
+        // Preserve extracted values. A division by month count is NOT, by itself,
+        // a 7th-CPC matrix validation and therefore must not be presented as one.
+        getElement('corr_basic').textContent = fmt(origBasic);
+        getElement('corr_da').textContent = fmt(origDa);
 
         const hasWarnings = Array.isArray(mainSlip.warnings)
             && mainSlip.warnings.length > 0;
 
-        getElement('matrix_status').textContent = hasWarnings
-            ? 'Review Needed'
-            : 'Checked';
+        getElement('matrix_status').textContent = arrear
+            ? 'Arrear Review'
+            : (isCombined
+                ? 'Lump Sum'
+                : (hasWarnings ? 'Review Needed' : 'Ready'));
 
         renderLedger(slips);
     }
@@ -659,14 +894,33 @@
             return;
         }
 
+        if (!Array.isArray(extractedSlips) || extractedSlips.length === 0) {
+            alert('Salary data is missing. Please upload the salary slip again.');
+            return;
+        }
+
+        // Fail BEFORE any ledger POST if an arrear is present. The arrear remains
+        // visible in sessionStorage and on this review screen; it is never dropped.
+        const arrearSlip = extractedSlips.find(isArrearSlip);
+        if (arrearSlip) {
+            const period = arrearSlip.period || {};
+            alert(
+                `Arrear detected (${period.raw || 'period unknown'}). ` +
+                'It has not been removed. Safe arrear storage needs the actual ' +
+                'payment/disbursement FY, so this application cannot continue ' +
+                'until that backend step is added.'
+            );
+            return;
+        }
+
         saveManualDetailsLocally();
 
         continueButton.disabled = true;
-        continueButton.textContent = 'Saving...';
+        continueButton.textContent = 'Saving employee...';
 
         try {
             // Save progress first so the journey remains visible in admin
-            // even if the next request or navigation fails.
+            // even if a later request or navigation fails.
             await saveProgress({ finalStep: true });
 
             const response = await fetch('/api/employee', {
@@ -701,6 +955,12 @@
                 );
             }
 
+            continueButton.textContent = 'Saving salary ledger...';
+
+            // This is the missing integration step that caused
+            // "No salary ledger found for FY ..." during PDF generation.
+            await saveLedgerEntries();
+
             sessionStorage.setItem(
                 'manualPersonalDetails',
                 JSON.stringify({
@@ -715,10 +975,10 @@
                 `/ddo-details?user_id=${encodeURIComponent(userId)}`;
 
         } catch (error) {
-            console.error('Employee details save failed:', error);
+            console.error('Review save failed:', error);
 
             alert(
-                'Employee details could not be saved: ' +
+                'Could not save the application: ' +
                 error.message
             );
 
