@@ -5,8 +5,12 @@ import tempfile
 import hashlib
 import hmac
 import time
-from datetime import datetime
+import smtplib
+import secrets
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from email.message import EmailMessage
+from email.utils import formataddr
 
 import requests
 
@@ -42,6 +46,10 @@ from models import (
     AdminSettings,
     Payment,
     EmployeeDetail,
+    VisitorSession,
+    VisitorEvent,
+    Form16Generation,
+    EmailDelivery,
 )
 
 from core.parser import load_and_parse_pdf
@@ -188,6 +196,797 @@ def get_slip_months(slip: dict) -> list:
     return result
 
 
+
+# =========================================================
+# VISITOR / EMAIL / FORM-16 HELPERS
+# =========================================================
+
+PUBLIC_PAGE_STEPS = {
+    "/": ("upload", "upload", 10),
+    "/review": ("review", "review", 35),
+    "/ddo-details": ("ddo_details", "ddo_details", 60),
+    "/payment": ("payment", "payment", 80),
+}
+
+REMINDER_DELAY_HOURS = int(os.getenv("REMINDER_DELAY_HOURS", "6"))
+
+
+def assessment_year_from_financial_year(financial_year: str) -> str:
+    financial_year = validate_financial_year(financial_year)
+    start_year = int(financial_year[:4])
+    return f"{start_year + 1}-{(start_year + 2) % 100:02d}"
+
+
+def normalise_email(value: Optional[str]) -> Optional[str]:
+    value = (value or "").strip().lower()
+    if not value:
+        return None
+
+    if not re.fullmatch(
+        r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+        r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+        r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+",
+        value,
+    ):
+        raise ValueError("Valid email address is required.")
+
+    return value
+
+
+def normalise_mobile(value: Optional[str]) -> Optional[str]:
+    value = re.sub(r"\D", "", value or "")
+
+    if not value:
+        return None
+
+    if len(value) == 12 and value.startswith("91"):
+        value = value[2:]
+
+    if not re.fullmatch(r"[6-9]\d{9}", value):
+        raise ValueError("Valid 10-digit Indian mobile number is required.")
+
+    return value
+
+
+def safe_snapshot(data: Optional[dict]) -> dict:
+    data = data or {}
+    allowed = {
+        "name",
+        "pan",
+        "office_school_name",
+        "tan_id",
+    }
+
+    result = {}
+    for key in allowed:
+        value = data.get(key)
+        if value is not None:
+            result[key] = str(value)[:500]
+
+    return result
+
+
+def add_visitor_event(
+    db: Session,
+    visitor_session: VisitorSession,
+    event_type: str,
+    page_name: Optional[str] = None,
+    step_name: Optional[str] = None,
+    event_data: Optional[dict] = None,
+):
+    event = VisitorEvent(
+        id=str(uuid.uuid4()),
+        session_id=visitor_session.id,
+        visitor_id=visitor_session.visitor_id,
+        user_id=visitor_session.user_id,
+        event_type=event_type,
+        page_name=page_name,
+        step_name=step_name,
+        event_data_json=event_data or {},
+    )
+    db.add(event)
+
+
+def get_or_create_visitor_session(
+    db: Session,
+    visitor_id: Optional[str],
+    journey_id: Optional[str],
+) -> tuple[VisitorSession, str, str]:
+    visitor_id = (visitor_id or "").strip() or str(uuid.uuid4())
+    journey_id = (journey_id or "").strip()
+
+    session = None
+    if journey_id:
+        session = (
+            db.query(VisitorSession)
+            .filter(VisitorSession.id == journey_id)
+            .first()
+        )
+
+    if not session:
+        session = VisitorSession(
+            id=str(uuid.uuid4()),
+            visitor_id=visitor_id,
+            current_page="upload",
+            current_step="upload",
+            progress_percent=10,
+            application_status="in_progress",
+            payment_status="not_started",
+            resume_token=secrets.token_urlsafe(32),
+            last_seen_at=datetime.utcnow(),
+        )
+        db.add(session)
+        db.flush()
+        add_visitor_event(
+            db,
+            session,
+            "form_started",
+            page_name="upload",
+            step_name="upload",
+        )
+
+    return session, visitor_id, session.id
+
+
+def find_active_visitor_session(
+    db: Session,
+    journey_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Optional[VisitorSession]:
+    if journey_id:
+        session = (
+            db.query(VisitorSession)
+            .filter(VisitorSession.id == journey_id)
+            .first()
+        )
+        if session:
+            return session
+
+    if user_id:
+        return (
+            db.query(VisitorSession)
+            .filter(VisitorSession.user_id == user_id)
+            .order_by(VisitorSession.last_seen_at.desc())
+            .first()
+        )
+
+    return None
+
+
+def sync_visitor_payment_state(
+    db: Session,
+    user_id: str,
+    payment_status: str,
+    application_status: Optional[str] = None,
+):
+    sessions = (
+        db.query(VisitorSession)
+        .filter(VisitorSession.user_id == user_id)
+        .all()
+    )
+
+    now = datetime.utcnow()
+
+    for session in sessions:
+        session.payment_status = payment_status
+        session.last_seen_at = now
+
+        if application_status:
+            session.application_status = application_status
+
+        if payment_status == "approved":
+            session.reminder_status = "cancelled"
+            session.reminder_due_at = None
+            session.completed_at = now
+            session.current_page = "completed"
+            session.current_step = "completed"
+            session.last_completed_step = "payment"
+            session.progress_percent = 100
+
+        add_visitor_event(
+            db,
+            session,
+            f"payment_{payment_status}",
+            page_name=session.current_page,
+            step_name=session.current_step,
+        )
+
+
+def smtp_is_configured() -> bool:
+    return bool(
+        os.getenv("SMTP_USERNAME")
+        and os.getenv("SMTP_PASSWORD")
+    )
+
+
+def send_email_message(
+    recipient: str,
+    subject: str,
+    body: str,
+    attachment_path: Optional[str] = None,
+    attachment_name: Optional[str] = None,
+) -> Optional[str]:
+    if not smtp_is_configured():
+        raise RuntimeError(
+            "Email is not configured. Set SMTP_USERNAME and SMTP_PASSWORD."
+        )
+
+    host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    username = os.getenv("SMTP_USERNAME", "").strip()
+    password = os.getenv("SMTP_PASSWORD", "").strip()
+    from_name = os.getenv("SMTP_FROM_NAME", "Form 16 Support").strip()
+
+    message = EmailMessage()
+    message["From"] = formataddr((from_name, username))
+    message["To"] = recipient
+    message["Subject"] = subject
+    message.set_content(body)
+
+    if attachment_path:
+        with open(attachment_path, "rb") as file_obj:
+            pdf_bytes = file_obj.read()
+
+        message.add_attachment(
+            pdf_bytes,
+            maintype="application",
+            subtype="pdf",
+            filename=attachment_name or "Form16.pdf",
+        )
+
+    with smtplib.SMTP(host, port, timeout=20) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(username, password)
+        response = server.send_message(message)
+
+    return "smtp-accepted" if not response else str(response)
+
+
+def queue_email_delivery(
+    db: Session,
+    recipient_email: str,
+    email_type: str,
+    subject: str,
+    user_id: Optional[str] = None,
+    visitor_session_id: Optional[str] = None,
+    payment_id: Optional[str] = None,
+    generation_id: Optional[str] = None,
+    scheduled_for: Optional[datetime] = None,
+) -> EmailDelivery:
+    delivery = EmailDelivery(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        visitor_session_id=visitor_session_id,
+        payment_id=payment_id,
+        generation_id=generation_id,
+        recipient_email=recipient_email,
+        email_type=email_type,
+        subject=subject,
+        status="queued",
+        scheduled_for=scheduled_for,
+        attempt_count=0,
+    )
+    db.add(delivery)
+    db.flush()
+    return delivery
+
+
+def send_delivery_now(
+    db: Session,
+    delivery: EmailDelivery,
+    body: str,
+    attachment_path: Optional[str] = None,
+    attachment_name: Optional[str] = None,
+) -> bool:
+    delivery.status = "sending"
+    delivery.attempt_count = int(delivery.attempt_count or 0) + 1
+    delivery.updated_at = datetime.utcnow()
+    db.commit()
+
+    try:
+        provider_message_id = send_email_message(
+            recipient=delivery.recipient_email,
+            subject=delivery.subject or "Form 16",
+            body=body,
+            attachment_path=attachment_path,
+            attachment_name=attachment_name,
+        )
+
+        delivery.status = "sent"
+        delivery.provider_message_id = provider_message_id
+        delivery.sent_at = datetime.utcnow()
+        delivery.error_message = None
+        delivery.updated_at = datetime.utcnow()
+        db.commit()
+        return True
+
+    except Exception as exc:
+        delivery.status = "failed"
+        delivery.error_message = str(exc)[:1000]
+        delivery.updated_at = datetime.utcnow()
+        db.commit()
+        print(f"Email delivery failed: {exc}")
+        return False
+
+
+def build_form16_payload(
+    db: Session,
+    user_id: str,
+    financial_year: str,
+):
+    employee = (
+        db.query(EmployeeDetail)
+        .filter(EmployeeDetail.user_id == user_id)
+        .first()
+    )
+
+    if not employee:
+        raise HTTPException(
+            status_code=400,
+            detail="Employee details are incomplete.",
+        )
+
+    if not employee.tan_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Employer TAN is missing.",
+        )
+
+    employer = (
+        db.query(EmployerCache)
+        .filter(EmployerCache.tan == employee.tan_id)
+        .first()
+    )
+
+    if not employer:
+        raise HTTPException(
+            status_code=400,
+            detail="Employer details are missing.",
+        )
+
+    ledger_rows = (
+        db.query(MonthlyLedger)
+        .filter(
+            MonthlyLedger.user_id == user_id,
+            MonthlyLedger.financial_year == financial_year,
+        )
+        .all()
+    )
+
+    if not ledger_rows:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No salary ledger found for FY {financial_year}.",
+        )
+
+    payroll_order = {
+        3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6,
+        9: 7, 10: 8, 11: 9, 12: 10, 1: 11, 2: 12,
+    }
+
+    ledger_rows.sort(
+        key=lambda row: (
+            payroll_order.get(row.month, 99),
+            row.year,
+        )
+    )
+
+    formatted_ledger = []
+    for row in ledger_rows:
+        formatted_ledger.append(
+            {
+                "month": row.month,
+                "year": row.year,
+                "month_year": row.month_year,
+                "financial_year": row.financial_year,
+                "basic_pay": row.basic_pay or 0,
+                "da": row.da or 0,
+                "hra": row.hra or 0,
+                "gross_salary": row.gross_salary or 0,
+                "line_items": row.line_items_json or {},
+                "deductions": row.deductions_json or {},
+                "source": row.source,
+                "is_auto_generated": row.is_auto_generated,
+                "note": row.note,
+                "flags": row.flags or [],
+            }
+        )
+
+    return employee, employer, formatted_ledger
+
+
+def generate_form16_for_record(
+    db: Session,
+    generation: Form16Generation,
+) -> tuple[str, str]:
+    if generate_form16_pdf is None:
+        raise HTTPException(
+            status_code=500,
+            detail="PDF generator is not available.",
+        )
+
+    generation.status = "generating"
+    db.commit()
+
+    try:
+        employee, employer, formatted_ledger = build_form16_payload(
+            db,
+            generation.user_id,
+            generation.financial_year,
+        )
+
+        pdf_path = generate_form16_pdf(
+            employee=employee,
+            employer=employer,
+            ledger=formatted_ledger,
+            financial_year=generation.financial_year,
+        )
+
+        if not pdf_path or not os.path.exists(pdf_path):
+            raise RuntimeError("Generated PDF file was not found.")
+
+        safe_name = re.sub(
+            r"[^A-Za-z0-9_-]+",
+            "_",
+            employee.name or "Employee",
+        ).strip("_")
+
+        filename = (
+            f"Form_16_{safe_name}_FY_"
+            f"{generation.financial_year}.pdf"
+        )
+
+        generation.status = "generated"
+        generation.file_name = filename
+        generation.generated_at = datetime.utcnow()
+        generation.error_message = None
+        db.commit()
+
+        return pdf_path, filename
+
+    except HTTPException:
+        generation.status = "failed"
+        generation.error_message = "Form 16 data validation failed."
+        db.commit()
+        raise
+
+    except Exception as exc:
+        generation.status = "failed"
+        generation.error_message = str(exc)[:1000]
+        db.commit()
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF generation failed: {exc}",
+        )
+
+
+def get_or_create_generation(
+    db: Session,
+    user_id: str,
+    financial_year: str,
+    source: str,
+    payment_id: Optional[str] = None,
+) -> Form16Generation:
+    query = db.query(Form16Generation).filter(
+        Form16Generation.user_id == user_id,
+        Form16Generation.financial_year == financial_year,
+        Form16Generation.source == source,
+    )
+
+    if payment_id:
+        query = query.filter(Form16Generation.payment_id == payment_id)
+
+    existing = (
+        query.order_by(Form16Generation.created_at.desc()).first()
+    )
+
+    if existing and existing.status in {"generated", "generating", "queued"}:
+        return existing
+
+    generation = Form16Generation(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        payment_id=payment_id,
+        financial_year=financial_year,
+        assessment_year=assessment_year_from_financial_year(financial_year),
+        source=source,
+        status="queued",
+    )
+    db.add(generation)
+    db.flush()
+    return generation
+
+
+def send_form16_email_for_generation(
+    generation_id: str,
+    email_type: str,
+):
+    db = SessionLocal()
+
+    try:
+        generation = (
+            db.query(Form16Generation)
+            .filter(Form16Generation.id == generation_id)
+            .first()
+        )
+
+        if not generation:
+            return
+
+        user = (
+            db.query(User)
+            .filter(User.id == generation.user_id)
+            .first()
+        )
+
+        employee = (
+            db.query(EmployeeDetail)
+            .filter(EmployeeDetail.user_id == generation.user_id)
+            .first()
+        )
+
+        if not user or not user.email or not employee:
+            return
+
+        pdf_path, filename = generate_form16_for_record(
+            db,
+            generation,
+        )
+
+        if email_type == "payment_confirmed_form16":
+            subject = (
+                f"Payment Confirmed – Your Form 16 for "
+                f"FY {generation.financial_year}"
+            )
+            body = (
+                f"Dear {employee.name or 'Employee'},\n\n"
+                "Your payment has been received and verified successfully.\n\n"
+                f"Your Form 16 for Financial Year "
+                f"{generation.financial_year} has now been generated and "
+                "is attached with this email.\n\n"
+                "Please keep this document safely for your income-tax "
+                "and official records.\n\n"
+                "Payment Status: Verified\n"
+                f"Financial Year: {generation.financial_year}\n"
+                f"PAN: {employee.pan or 'N/A'}\n\n"
+                "Thank you for using our Form 16 service.\n\n"
+                "Regards,\nForm 16 Support Team"
+            )
+        else:
+            subject = (
+                f"Form 16 Generated by Administrator – "
+                f"FY {generation.financial_year}"
+            )
+            body = (
+                f"Dear {employee.name or 'Employee'},\n\n"
+                f"Your Form 16 for Financial Year "
+                f"{generation.financial_year} has been generated directly "
+                "by the authorised administrator and is attached with this "
+                "email.\n\n"
+                "No payment verification was required for this "
+                "administrative generation.\n\n"
+                "Generation Type: Administrator Generated\n"
+                f"Financial Year: {generation.financial_year}\n"
+                f"PAN: {employee.pan or 'N/A'}\n\n"
+                "Please retain the attached document for your official "
+                "and income-tax records.\n\n"
+                "Regards,\nForm 16 Administration Team"
+            )
+
+        delivery = queue_email_delivery(
+            db,
+            recipient_email=user.email,
+            email_type=email_type,
+            subject=subject,
+            user_id=user.id,
+            payment_id=generation.payment_id,
+            generation_id=generation.id,
+        )
+        db.commit()
+
+        send_delivery_now(
+            db,
+            delivery,
+            body=body,
+            attachment_path=pdf_path,
+            attachment_name=filename,
+        )
+
+    except Exception as exc:
+        print(f"Form 16 email task failed: {exc}")
+
+    finally:
+        db.close()
+
+
+def process_due_reminders(limit: int = 50) -> dict:
+    db = SessionLocal()
+    now = datetime.utcnow()
+    sent = 0
+    failed = 0
+    skipped = 0
+
+    try:
+        sessions = (
+            db.query(VisitorSession)
+            .filter(
+                VisitorSession.reminder_status == "pending",
+                VisitorSession.reminder_due_at.isnot(None),
+                VisitorSession.reminder_due_at <= now,
+                VisitorSession.email.isnot(None),
+                VisitorSession.email_contact_consent.is_(True),
+                VisitorSession.payment_status != "approved",
+            )
+            .order_by(VisitorSession.reminder_due_at.asc())
+            .limit(limit)
+            .all()
+        )
+
+        base_url = (
+            os.getenv("PUBLIC_BASE_URL")
+            or os.getenv("RENDER_EXTERNAL_URL")
+            or ""
+        ).rstrip("/")
+
+        for session in sessions:
+            if not session.resume_token:
+                skipped += 1
+                continue
+
+            resume_url = (
+                f"{base_url}/resume/{session.resume_token}"
+                if base_url
+                else f"/resume/{session.resume_token}"
+            )
+
+            subject = "Complete Your Form 16 Application"
+            body = (
+                "Hello,\n\n"
+                "Your Form 16 application is still incomplete. "
+                "You can continue from where you left off using the "
+                "resume link below:\n\n"
+                f"{resume_url}\n\n"
+                f"Last completed step: "
+                f"{session.last_completed_step or 'Application started'}\n\n"
+                "If you have already completed the process, please ignore "
+                "this email.\n\n"
+                "Regards,\nForm 16 Support Team"
+            )
+
+            delivery = queue_email_delivery(
+                db,
+                recipient_email=session.email,
+                email_type="abandoned_reminder",
+                subject=subject,
+                user_id=session.user_id,
+                visitor_session_id=session.id,
+            )
+            db.commit()
+
+            ok = send_delivery_now(
+                db,
+                delivery,
+                body=body,
+            )
+
+            if ok:
+                session.reminder_status = "sent"
+                session.reminder_sent_at = datetime.utcnow()
+                session.application_status = (
+                    "abandoned"
+                    if session.application_status == "in_progress"
+                    else session.application_status
+                )
+                session.abandoned_at = (
+                    session.abandoned_at or datetime.utcnow()
+                )
+                sent += 1
+            else:
+                session.reminder_status = "failed"
+                failed += 1
+
+            db.commit()
+
+        return {
+            "sent": sent,
+            "failed": failed,
+            "skipped": skipped,
+        }
+
+    finally:
+        db.close()
+
+
+@app.middleware("http")
+async def visitor_tracking_middleware(request: Request, call_next):
+    path = request.url.path
+
+    if (
+        path.startswith("/admin")
+        or path.startswith("/api")
+        or path.startswith("/static")
+        or path.startswith("/docs")
+        or path.startswith("/openapi")
+        or path == "/favicon.ico"
+    ):
+        return await call_next(request)
+
+    visitor_id = request.cookies.get("form16_visitor_id")
+    journey_id = request.cookies.get("form16_journey_id")
+
+    db = SessionLocal()
+    session = None
+    new_visitor_id = visitor_id
+    new_journey_id = journey_id
+
+    try:
+        session, new_visitor_id, new_journey_id = (
+            get_or_create_visitor_session(
+                db,
+                visitor_id,
+                journey_id,
+            )
+        )
+
+        page_info = PUBLIC_PAGE_STEPS.get(path)
+        if page_info:
+            page_name, step_name, progress = page_info
+            session.current_page = page_name
+            session.current_step = step_name
+            session.progress_percent = max(
+                int(session.progress_percent or 0),
+                progress,
+            )
+            session.last_seen_at = datetime.utcnow()
+
+            user_id = request.query_params.get("user_id")
+            if user_id:
+                session.user_id = user_id
+
+            add_visitor_event(
+                db,
+                session,
+                "page_view",
+                page_name=page_name,
+                step_name=step_name,
+            )
+
+        db.commit()
+
+    except Exception as exc:
+        db.rollback()
+        print(f"Visitor tracking failed: {exc}")
+
+    finally:
+        db.close()
+
+    response = await call_next(request)
+
+    if new_visitor_id and new_visitor_id != visitor_id:
+        response.set_cookie(
+            "form16_visitor_id",
+            new_visitor_id,
+            max_age=365 * 24 * 60 * 60,
+            httponly=True,
+            samesite="lax",
+            secure=request_uses_https(request),
+        )
+
+    if new_journey_id and new_journey_id != journey_id:
+        response.set_cookie(
+            "form16_journey_id",
+            new_journey_id,
+            max_age=30 * 24 * 60 * 60,
+            httponly=True,
+            samesite="lax",
+            secure=request_uses_https(request),
+        )
+
+    return response
+
+
 # =========================================================
 # ADMIN SESSION HELPERS
 # =========================================================
@@ -310,6 +1109,10 @@ class EmployeeDetailSchema(BaseModel):
     pan: str
     office_school_name: Optional[str] = None
     tan_id: Optional[str] = None
+    email: Optional[str] = None
+    mobile: Optional[str] = None
+    visitor_session_id: Optional[str] = None
+    email_contact_consent: bool = False
 
 
 class AdminSettingsSchema(BaseModel):
@@ -412,6 +1215,15 @@ def save_employee_details(
     name = data.name.strip()
     pan = data.pan.strip().upper()
 
+    try:
+        email = normalise_email(data.email)
+        mobile = normalise_mobile(data.mobile)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
     tan_id = (
         data.tan_id.strip().upper()
         if data.tan_id
@@ -453,6 +1265,38 @@ def save_employee_details(
         db.add(user)
         db.flush()
 
+    if email:
+        duplicate_email = (
+            db.query(User)
+            .filter(
+                User.email == email,
+                User.id != user_id,
+            )
+            .first()
+        )
+        if duplicate_email:
+            raise HTTPException(
+                status_code=400,
+                detail="This email is already linked to another user.",
+            )
+        user.email = email
+
+    if mobile:
+        duplicate_mobile = (
+            db.query(User)
+            .filter(
+                User.mobile == mobile,
+                User.id != user_id,
+            )
+            .first()
+        )
+        if duplicate_mobile:
+            raise HTTPException(
+                status_code=400,
+                detail="This mobile number is already linked to another user.",
+            )
+        user.mobile = mobile
+
     if tan_id:
         employer = (
             db.query(EmployerCache)
@@ -492,8 +1336,64 @@ def save_employee_details(
             office_school_name=office_school_name,
             tan_id=tan_id,
         )
-
         db.add(employee)
+
+    visitor_session = find_active_visitor_session(
+        db,
+        journey_id=data.visitor_session_id,
+        user_id=user_id,
+    )
+
+    if visitor_session:
+        visitor_session.user_id = user_id
+
+        if email:
+            visitor_session.email = email
+
+        if mobile:
+            visitor_session.mobile = mobile
+
+        visitor_session.current_page = "review"
+        visitor_session.current_step = "contact_saved"
+        visitor_session.last_completed_step = "review"
+        visitor_session.progress_percent = max(
+            int(visitor_session.progress_percent or 0),
+            45,
+        )
+        visitor_session.last_seen_at = datetime.utcnow()
+
+        snapshot = dict(visitor_session.form_snapshot_json or {})
+        snapshot.update(
+            safe_snapshot(
+                {
+                    "name": name,
+                    "pan": pan,
+                    "office_school_name": office_school_name,
+                    "tan_id": tan_id,
+                }
+            )
+        )
+        visitor_session.form_snapshot_json = snapshot
+
+        if email and data.email_contact_consent:
+            visitor_session.email_contact_consent = True
+            visitor_session.reminder_status = "pending"
+            visitor_session.reminder_due_at = (
+                datetime.utcnow()
+                + timedelta(hours=REMINDER_DELAY_HOURS)
+            )
+
+        add_visitor_event(
+            db,
+            visitor_session,
+            "contact_saved",
+            page_name="review",
+            step_name="contact_saved",
+            event_data={
+                "has_email": bool(email),
+                "has_mobile": bool(mobile),
+            },
+        )
 
     try:
         db.commit()
@@ -501,7 +1401,6 @@ def save_employee_details(
 
     except IntegrityError:
         db.rollback()
-
         raise HTTPException(
             status_code=400,
             detail="Employee details could not be saved.",
@@ -514,7 +1413,11 @@ def save_employee_details(
         "pan": employee.pan,
         "office_school_name": employee.office_school_name,
         "tan_id": employee.tan_id,
+        "email": user.email,
+        "mobile": user.mobile,
     }
+
+
 @app.get("/api/employee/{user_id}")
 def get_employee_details(
     user_id: str,
@@ -532,13 +1435,203 @@ def get_employee_details(
             detail="Employee details not found.",
         )
 
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
     return {
         "user_id": employee.user_id,
         "name": employee.name,
         "pan": employee.pan,
         "office_school_name": employee.office_school_name,
         "tan_id": employee.tan_id,
+        "email": user.email if user else None,
+        "mobile": user.mobile if user else None,
     }
+
+
+# =========================================================
+# VISITOR / APPLICATION PROGRESS API
+# =========================================================
+
+class ProgressSchema(BaseModel):
+    user_id: Optional[str] = None
+    page_name: str
+    step_name: str
+    last_completed_step: Optional[str] = None
+    progress_percent: int = Field(default=0, ge=0, le=100)
+    email: Optional[str] = None
+    mobile: Optional[str] = None
+    email_contact_consent: bool = False
+    snapshot: Dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/api/progress")
+def save_application_progress(
+    data: ProgressSchema,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    journey_id = request.cookies.get("form16_journey_id")
+    visitor_id = request.cookies.get("form16_visitor_id")
+
+    session = find_active_visitor_session(
+        db,
+        journey_id=journey_id,
+        user_id=data.user_id,
+    )
+
+    if not session:
+        session, _, _ = get_or_create_visitor_session(
+            db,
+            visitor_id,
+            journey_id,
+        )
+
+    if data.user_id:
+        session.user_id = data.user_id
+
+    try:
+        email = normalise_email(data.email)
+        mobile = normalise_mobile(data.mobile)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    if email:
+        session.email = email
+
+    if mobile:
+        session.mobile = mobile
+
+    session.current_page = data.page_name.strip()[:100]
+    session.current_step = data.step_name.strip()[:100]
+
+    if data.last_completed_step:
+        session.last_completed_step = (
+            data.last_completed_step.strip()[:100]
+        )
+
+    session.progress_percent = max(
+        int(session.progress_percent or 0),
+        data.progress_percent,
+    )
+    session.last_seen_at = datetime.utcnow()
+
+    snapshot = dict(session.form_snapshot_json or {})
+    snapshot.update(safe_snapshot(data.snapshot))
+    session.form_snapshot_json = snapshot
+
+    if email and data.email_contact_consent:
+        session.email_contact_consent = True
+
+        if session.payment_status != "approved":
+            session.reminder_status = "pending"
+            session.reminder_due_at = (
+                datetime.utcnow()
+                + timedelta(hours=REMINDER_DELAY_HOURS)
+            )
+
+    add_visitor_event(
+        db,
+        session,
+        "step_completed"
+        if data.last_completed_step
+        else "progress_saved",
+        page_name=session.current_page,
+        step_name=session.current_step,
+    )
+
+    db.commit()
+
+    return {
+        "message": "Progress saved.",
+        "session_id": session.id,
+        "resume_token": session.resume_token,
+        "progress_percent": session.progress_percent,
+    }
+
+
+@app.get("/resume/{resume_token}")
+def resume_application(
+    resume_token: str,
+    db: Session = Depends(get_db),
+):
+    session = (
+        db.query(VisitorSession)
+        .filter(VisitorSession.resume_token == resume_token)
+        .first()
+    )
+
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="Resume link is invalid or expired.",
+        )
+
+    page_routes = {
+        "upload": "/",
+        "review": "/review",
+        "ddo_details": "/ddo-details",
+        "payment": "/payment",
+        "payment_wait": "/payment",
+        "completed": "/",
+    }
+
+    target = page_routes.get(
+        session.current_page or "",
+        "/",
+    )
+
+    if session.user_id and target != "/":
+        separator = "&" if "?" in target else "?"
+        target = (
+            f"{target}{separator}user_id={session.user_id}"
+        )
+
+    response = RedirectResponse(
+        url=target,
+        status_code=303,
+    )
+
+    response.set_cookie(
+        "form16_visitor_id",
+        session.visitor_id,
+        max_age=365 * 24 * 60 * 60,
+        httponly=True,
+        samesite="lax",
+    )
+    response.set_cookie(
+        "form16_journey_id",
+        session.id,
+        max_age=30 * 24 * 60 * 60,
+        httponly=True,
+        samesite="lax",
+    )
+
+    return response
+
+
+@app.post("/api/internal/process-reminders")
+def process_reminders_endpoint(
+    request: Request,
+):
+    expected = os.getenv("REMINDER_CRON_SECRET", "").strip()
+    supplied = request.headers.get("x-reminder-secret", "").strip()
+
+    if not expected or not hmac.compare_digest(expected, supplied):
+        raise HTTPException(
+            status_code=401,
+            detail="Reminder processor authentication failed.",
+        )
+
+    return process_due_reminders()
+
+
 # =========================================================
 # EMPLOYER / TAN CACHE
 # =========================================================
@@ -1052,49 +2145,36 @@ async def admin_dashboard(
     )
 
     dashboard_data = []
-    admin_generated = []
 
     for payment in payments:
         employee = (
             db.query(EmployeeDetail)
-            .filter(
-                EmployeeDetail.user_id == payment.user_id
-            )
+            .filter(EmployeeDetail.user_id == payment.user_id)
+            .first()
+        )
+        user = (
+            db.query(User)
+            .filter(User.id == payment.user_id)
             .first()
         )
 
-        is_admin_generated = (
-            str(payment.upi_txn_utr or "")
-            .upper()
-            .startswith("ADMIN-")
+        dashboard_data.append(
+            {
+                "payment_id": payment.id,
+                "id": payment.id,
+                "user_id": payment.user_id,
+                "name": employee.name if employee else "Unknown Employee",
+                "pan": employee.pan if employee else "N/A",
+                "email": user.email if user else None,
+                "mobile": user.mobile if user else None,
+                "utr_number": payment.upi_txn_utr,
+                "amount": payment.amount or 0,
+                "status": payment.status,
+                "created_at": payment.created_at,
+                "approved_at": payment.approved_at,
+                "is_admin_generated": False,
+            }
         )
-
-        item = {
-            "payment_id": payment.id,
-            "id": payment.id,
-            "user_id": payment.user_id,
-            "name": (
-                employee.name
-                if employee
-                else "Unknown Employee"
-            ),
-            "pan": (
-                employee.pan
-                if employee
-                else "N/A"
-            ),
-            "utr_number": payment.upi_txn_utr,
-            "amount": payment.amount or 0,
-            "status": payment.status,
-            "created_at": payment.created_at,
-            "approved_at": payment.approved_at,
-            "is_admin_generated": is_admin_generated,
-        }
-
-        if is_admin_generated:
-            admin_generated.append(item)
-        else:
-            dashboard_data.append(item)
 
     settings = db.query(AdminSettings).first()
 
@@ -1107,27 +2187,22 @@ async def admin_dashboard(
     assessment_year = None
     if financial_year:
         try:
-            start_year = int(financial_year[:4])
-            assessment_year = (
-                f"{start_year + 1}-"
-                f"{(start_year + 2) % 100:02d}"
+            assessment_year = assessment_year_from_financial_year(
+                financial_year
             )
-        except (TypeError, ValueError):
+        except ValueError:
             assessment_year = None
 
     pending_count = sum(
-        1
-        for item in dashboard_data
+        1 for item in dashboard_data
         if item["status"] == "pending"
     )
     approved_count = sum(
-        1
-        for item in dashboard_data
+        1 for item in dashboard_data
         if item["status"] == "approved"
     )
     rejected_count = sum(
-        1
-        for item in dashboard_data
+        1 for item in dashboard_data
         if item["status"] == "rejected"
     )
     total_revenue = sum(
@@ -1142,6 +2217,116 @@ async def admin_dashboard(
         .all()
     )
 
+    visitor_sessions = (
+        db.query(VisitorSession)
+        .order_by(VisitorSession.last_seen_at.desc())
+        .all()
+    )
+
+    incomplete_users = []
+    for session in visitor_sessions:
+        if session.application_status == "completed":
+            continue
+
+        if session.payment_status == "approved":
+            continue
+
+        employee = None
+        if session.user_id:
+            employee = (
+                db.query(EmployeeDetail)
+                .filter(EmployeeDetail.user_id == session.user_id)
+                .first()
+            )
+
+        incomplete_users.append(
+            {
+                "session_id": session.id,
+                "user_id": session.user_id,
+                "name": (
+                    employee.name
+                    if employee
+                    else (session.form_snapshot_json or {}).get("name")
+                ),
+                "email": session.email,
+                "mobile": session.mobile,
+                "current_page": session.current_page,
+                "current_step": session.current_step,
+                "last_completed_step": session.last_completed_step,
+                "progress_percent": session.progress_percent or 0,
+                "application_status": session.application_status,
+                "payment_status": session.payment_status,
+                "reminder_status": session.reminder_status,
+                "last_seen_at": session.last_seen_at,
+            }
+        )
+
+    generations = (
+        db.query(Form16Generation)
+        .order_by(Form16Generation.created_at.desc())
+        .all()
+    )
+
+    admin_generated = []
+    for generation in generations:
+        if generation.source != "admin":
+            continue
+
+        employee = (
+            db.query(EmployeeDetail)
+            .filter(EmployeeDetail.user_id == generation.user_id)
+            .first()
+        )
+        user = (
+            db.query(User)
+            .filter(User.id == generation.user_id)
+            .first()
+        )
+
+        admin_generated.append(
+            {
+                "id": generation.id,
+                "generation_id": generation.id,
+                "user_id": generation.user_id,
+                "name": employee.name if employee else "Unknown Employee",
+                "pan": employee.pan if employee else "N/A",
+                "email": user.email if user else None,
+                "financial_year": generation.financial_year,
+                "status": generation.status,
+                "created_at": generation.created_at,
+                "generated_at": generation.generated_at,
+                "download_count": generation.download_count or 0,
+            }
+        )
+
+    unique_visitors = (
+        db.query(VisitorSession.visitor_id)
+        .distinct()
+        .count()
+    )
+
+    form_started = db.query(VisitorSession).count()
+
+    payment_page_count = (
+        db.query(VisitorSession)
+        .filter(
+            VisitorSession.progress_percent >= 80
+        )
+        .count()
+    )
+
+    email_sent_count = (
+        db.query(EmailDelivery)
+        .filter(EmailDelivery.status == "sent")
+        .count()
+    )
+
+    email_failed_count = (
+        db.query(EmailDelivery)
+        .filter(EmailDelivery.status == "failed")
+        .count()
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="admin_dashboard.html",
@@ -1151,6 +2336,8 @@ async def admin_dashboard(
             "payments": dashboard_data,
             "admin_generated": admin_generated,
             "employees": employees,
+            "incomplete_users": incomplete_users,
+            "visitor_sessions": visitor_sessions,
             "financial_year": financial_year,
             "assessment_year": assessment_year,
             "fee_amount": (
@@ -1175,11 +2362,17 @@ async def admin_dashboard(
             ),
             "stats": {
                 "total_users": db.query(User).count(),
+                "unique_visitors": unique_visitors,
+                "form_started": form_started,
+                "incomplete_users": len(incomplete_users),
+                "payment_page_reached": payment_page_count,
                 "total_revenue": total_revenue,
                 "pending_payments": pending_count,
                 "approved_payments": approved_count,
                 "rejected_payments": rejected_count,
                 "admin_generated": len(admin_generated),
+                "email_sent": email_sent_count,
+                "email_failed": email_failed_count,
             },
         },
     )
@@ -1192,6 +2385,7 @@ async def admin_dashboard(
 @app.post("/admin/payment/approve/{payment_id}")
 def approve_payment(
     payment_id: str,
+    background_tasks: BackgroundTasks,
     admin_session: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
@@ -1215,7 +2409,31 @@ def approve_payment(
 
     payment.status = "approved"
     payment.approved_at = datetime.utcnow()
+
+    sync_visitor_payment_state(
+        db,
+        payment.user_id,
+        "approved",
+        application_status="completed",
+    )
+
+    financial_year = get_active_financial_year(db)
+
+    generation = get_or_create_generation(
+        db,
+        user_id=payment.user_id,
+        financial_year=financial_year,
+        source="user_payment",
+        payment_id=payment.id,
+    )
+
     db.commit()
+
+    background_tasks.add_task(
+        send_form16_email_for_generation,
+        generation.id,
+        "payment_confirmed_form16",
+    )
 
     return RedirectResponse(
         url="/admin/dashboard",
@@ -1249,6 +2467,14 @@ def decline_payment(
 
     payment.status = "rejected"
     payment.approved_at = None
+
+    sync_visitor_payment_state(
+        db,
+        payment.user_id,
+        "rejected",
+        application_status="payment_pending",
+    )
+
     db.commit()
 
     return RedirectResponse(
@@ -1260,6 +2486,7 @@ def decline_payment(
 @app.get("/api/admin/approve/{payment_id}")
 def admin_approve_payment(
     payment_id: str,
+    background_tasks: BackgroundTasks,
     admin_session: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
@@ -1279,12 +2506,35 @@ def admin_approve_payment(
 
     payment.status = "approved"
     payment.approved_at = datetime.utcnow()
+
+    sync_visitor_payment_state(
+        db,
+        payment.user_id,
+        "approved",
+        application_status="completed",
+    )
+
+    financial_year = get_active_financial_year(db)
+
+    generation = get_or_create_generation(
+        db,
+        user_id=payment.user_id,
+        financial_year=financial_year,
+        source="user_payment",
+        payment_id=payment.id,
+    )
+
     db.commit()
 
+    background_tasks.add_task(
+        send_form16_email_for_generation,
+        generation.id,
+        "payment_confirmed_form16",
+    )
+
     return {
-        "message": (
-            f"Payment {payment_id} successfully approved."
-        )
+        "message": f"Payment {payment_id} successfully approved.",
+        "generation_id": generation.id,
     }
 
 
@@ -1295,6 +2545,7 @@ def admin_approve_payment(
 @app.post("/admin/form16/generate/{user_id}")
 def admin_generate_form16(
     user_id: str,
+    background_tasks: BackgroundTasks,
     admin_session: str = Cookie(None),
     db: Session = Depends(get_db),
 ):
@@ -1316,6 +2567,18 @@ def admin_generate_form16(
             detail="Employee details not found.",
         )
 
+    user = (
+        db.query(User)
+        .filter(User.id == user_id)
+        .first()
+    )
+
+    if not user or not user.email:
+        raise HTTPException(
+            status_code=400,
+            detail="Employee email is required before admin generation.",
+        )
+
     if not employee.tan_id:
         raise HTTPException(
             status_code=400,
@@ -1324,41 +2587,36 @@ def admin_generate_form16(
 
     financial_year = get_active_financial_year(db)
 
-    has_ledger = (
-        db.query(MonthlyLedger)
-        .filter(
-            MonthlyLedger.user_id == user_id,
-            MonthlyLedger.financial_year == financial_year,
-        )
-        .first()
+    # Validate all required PDF data before creating the audit record.
+    build_form16_payload(
+        db,
+        user_id,
+        financial_year,
     )
 
-    if not has_ledger:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"No salary ledger found for FY "
-                f"{financial_year}."
-            ),
-        )
-
-    payment_id = str(uuid.uuid4())
-    admin_utr = f"ADMIN-{uuid.uuid4().hex.upper()}"
-
-    record = Payment(
-        id=payment_id,
+    generation = Form16Generation(
+        id=str(uuid.uuid4()),
         user_id=user_id,
-        amount=0.0,
-        upi_txn_utr=admin_utr,
-        status="approved",
-        approved_at=datetime.utcnow(),
+        payment_id=None,
+        financial_year=financial_year,
+        assessment_year=assessment_year_from_financial_year(
+            financial_year
+        ),
+        source="admin",
+        status="queued",
     )
 
-    db.add(record)
+    db.add(generation)
     db.commit()
 
+    background_tasks.add_task(
+        send_form16_email_for_generation,
+        generation.id,
+        "admin_generated_form16",
+    )
+
     return RedirectResponse(
-        url=f"/api/download/form16/{payment_id}",
+        url=f"/api/download/form16-generation/{generation.id}",
         status_code=303,
     )
 
@@ -1541,6 +2799,12 @@ async def submit_utr(
 
     try:
 
+        sync_visitor_payment_state(
+            db,
+            user_id,
+            "pending",
+            application_status="payment_submitted",
+        )
         db.commit()
 
     except IntegrityError as exc:
@@ -1606,220 +2870,65 @@ def check_payment_status(
 # FORM 16 DOWNLOAD
 # =========================================================
 
-@app.get(
-    "/api/download/form16/{payment_id}"
-)
-def download_pdf(
-    payment_id: str,
-    db: Session = Depends(get_db),
+def mark_generation_downloaded(
+    db: Session,
+    generation: Form16Generation,
 ):
+    now = datetime.utcnow()
+    generation.download_count = int(generation.download_count or 0) + 1
 
-    payment = (
-        db.query(Payment)
-        .filter(Payment.id == payment_id)
-        .first()
-    )
+    if not generation.first_downloaded_at:
+        generation.first_downloaded_at = now
 
-    if (
-        not payment
-        or payment.status != "approved"
-    ):
+    generation.last_downloaded_at = now
 
-        raise HTTPException(
-            status_code=403,
-            detail="Payment not approved yet.",
-        )
-
-    employee = (
-        db.query(EmployeeDetail)
-        .filter(
-            EmployeeDetail.user_id
-            == payment.user_id
-        )
-        .first()
-    )
-
-    if not employee:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Employee details are incomplete.",
-        )
-
-    if not employee.tan_id:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Employer TAN is missing.",
-        )
-
-    employer = (
-        db.query(EmployerCache)
-        .filter(
-            EmployerCache.tan
-            == employee.tan_id
-        )
-        .first()
-    )
-
-    if not employer:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Employer details are missing.",
-        )
-
-    financial_year = get_active_financial_year(db)
-
-    # Only selected FY is allowed into Form 16.
-    ledger_rows = (
-        db.query(MonthlyLedger)
-        .filter(
-            MonthlyLedger.user_id
-            == payment.user_id,
-
-            MonthlyLedger.financial_year
-            == financial_year,
-        )
+    sessions = (
+        db.query(VisitorSession)
+        .filter(VisitorSession.user_id == generation.user_id)
         .all()
     )
 
-    if not ledger_rows:
-
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"No salary ledger found for "
-                f"FY {financial_year}."
-            ),
+    for session in sessions:
+        add_visitor_event(
+            db,
+            session,
+            "form16_downloaded",
+            page_name="completed",
+            step_name="download",
+            event_data={
+                "generation_id": generation.id,
+                "source": generation.source,
+            },
         )
 
-    # March -> February ordering.
-    payroll_order = {
-        3: 1,
-        4: 2,
-        5: 3,
-        6: 4,
-        7: 5,
-        8: 6,
-        9: 7,
-        10: 8,
-        11: 9,
-        12: 10,
-        1: 11,
-        2: 12,
-    }
+    db.commit()
 
-    ledger_rows.sort(
-        key=lambda row: (
-            payroll_order.get(row.month, 99),
-            row.year,
-        )
+
+@app.get("/api/download/form16-generation/{generation_id}")
+def download_generation_pdf(
+    generation_id: str,
+    db: Session = Depends(get_db),
+):
+    generation = (
+        db.query(Form16Generation)
+        .filter(Form16Generation.id == generation_id)
+        .first()
     )
 
-    formatted_ledger = []
-
-    for row in ledger_rows:
-
-        formatted_ledger.append(
-            {
-                "month": row.month,
-                "year": row.year,
-                "month_year": row.month_year,
-
-                "financial_year": (
-                    row.financial_year
-                ),
-
-                "basic_pay": row.basic_pay or 0,
-                "da": row.da or 0,
-                "hra": row.hra or 0,
-
-                "gross_salary": (
-                    row.gross_salary or 0
-                ),
-
-                "line_items": (
-                    row.line_items_json or {}
-                ),
-
-                "deductions": (
-                    row.deductions_json or {}
-                ),
-
-                "source": row.source,
-
-                "is_auto_generated": (
-                    row.is_auto_generated
-                ),
-
-                "note": row.note,
-                "flags": row.flags or [],
-            }
-        )
-
-    if generate_form16_pdf is None:
-
+    if not generation:
         raise HTTPException(
-            status_code=500,
-            detail=(
-                "PDF generator is not available."
-            ),
+            status_code=404,
+            detail="Form 16 generation record not found.",
         )
 
-    # pdf_generator.py will be audited separately.
-    # It is intentionally the only component responsible
-    # for PDF layout/rendering.
+    pdf_path, filename = generate_form16_for_record(
+        db,
+        generation,
+    )
 
-    try:
-
-        pdf_path = generate_form16_pdf(
-            employee=employee,
-            employer=employer,
-            ledger=formatted_ledger,
-            financial_year=financial_year,
-        )
-
-    except TypeError as exc:
-
-        # Current pdf_generator may still use its old
-        # function signature. We will align that file
-        # in its own audit instead of silently guessing.
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "pdf_generator.py interface needs "
-                f"alignment: {exc}"
-            ),
-        )
-
-    except Exception as exc:
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"PDF generation failed: {exc}",
-        )
-
-    if (
-        not pdf_path
-        or not os.path.exists(pdf_path)
-    ):
-
-        raise HTTPException(
-            status_code=500,
-            detail="Generated PDF file was not found.",
-        )
-
-    safe_name = re.sub(
-        r"[^A-Za-z0-9_-]+",
-        "_",
-        employee.name or "Employee",
-    ).strip("_")
-
-    filename = (
-        f"Form_16_{safe_name}_FY_"
-        f"{financial_year}.pdf"
+    mark_generation_downloaded(
+        db,
+        generation,
     )
 
     return FileResponse(
@@ -1827,3 +2936,50 @@ def download_pdf(
         filename=filename,
         media_type="application/pdf",
     )
+
+
+@app.get("/api/download/form16/{payment_id}")
+def download_pdf(
+    payment_id: str,
+    db: Session = Depends(get_db),
+):
+    payment = (
+        db.query(Payment)
+        .filter(Payment.id == payment_id)
+        .first()
+    )
+
+    if not payment or payment.status != "approved":
+        raise HTTPException(
+            status_code=403,
+            detail="Payment not approved yet.",
+        )
+
+    financial_year = get_active_financial_year(db)
+
+    generation = get_or_create_generation(
+        db,
+        user_id=payment.user_id,
+        financial_year=financial_year,
+        source="user_payment",
+        payment_id=payment.id,
+    )
+
+    db.commit()
+
+    pdf_path, filename = generate_form16_for_record(
+        db,
+        generation,
+    )
+
+    mark_generation_downloaded(
+        db,
+        generation,
+    )
+
+    return FileResponse(
+        path=pdf_path,
+        filename=filename,
+        media_type="application/pdf",
+    )
+
