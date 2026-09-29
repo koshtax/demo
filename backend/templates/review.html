@@ -6,7 +6,9 @@
     <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
         <div>
             <h2 class="text-xl font-semibold text-slate-800">Salary Slip Review</h2>
-            <p class="text-sm text-slate-500 mt-1">Form 16 Generation FY 2025-26 (Mar 2025 - Feb 2026)</p>
+            <p class="text-sm text-slate-500 mt-1">
+                Review the extracted salary data before continuing to DDO details.
+            </p>
         </div>
         <div class="text-right">
             <p class="text-sm text-slate-500 uppercase tracking-wide">Employee PAN</p>
@@ -15,67 +17,161 @@
     </div>
 
     <div class="p-6">
-        
-        <!-- NEW: Employee Personal Details Section -->
-        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">Employee Personal Details</h3>
+        <!-- Employee Personal Details Section -->
+        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">
+            Employee Personal Details
+        </h3>
+
         <div class="bg-slate-50 p-5 rounded-lg border border-slate-200 mb-8">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                
                 <!-- Auto-filled (Non-editable) -->
                 <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">Employee Name</label>
-                    <input type="text" id="emp_name" readonly class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm cursor-not-allowed font-medium">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">PAN Number</label>
-                    <input type="text" id="emp_pan_input" readonly class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm font-mono cursor-not-allowed font-medium">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">GPF / PRAN Number</label>
-                    <input type="text" id="emp_gpf" readonly class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm font-mono cursor-not-allowed font-medium">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">Designation</label>
-                    <input type="text" id="emp_desig" readonly class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm cursor-not-allowed font-medium">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
+                        Employee Name
+                    </label>
+                    <input
+                        type="text"
+                        id="emp_name"
+                        readonly
+                        class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm cursor-not-allowed font-medium"
+                    >
                 </div>
 
-                <!-- Divider -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
+                        PAN Number
+                    </label>
+                    <input
+                        type="text"
+                        id="emp_pan_input"
+                        readonly
+                        class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm font-mono cursor-not-allowed font-medium"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
+                        GPF / PRAN Number
+                    </label>
+                    <input
+                        type="text"
+                        id="emp_gpf"
+                        readonly
+                        class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm font-mono cursor-not-allowed font-medium"
+                    >
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
+                        Designation
+                    </label>
+                    <input
+                        type="text"
+                        id="emp_desig"
+                        readonly
+                        class="w-full bg-slate-200 border-slate-300 text-slate-700 rounded-md px-3 py-2 text-sm cursor-not-allowed font-medium"
+                    >
+                </div>
+
                 <div class="md:col-span-2">
                     <hr class="border-slate-200 my-2">
                 </div>
 
                 <!-- Manually Filled (Editable) -->
                 <div class="md:col-span-2">
-                    <label class="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">Office / School Name & Address <span class="text-red-500">*</span></label>
-                    <input type="text" id="emp_office" placeholder="e.g., Utkramit +2 High School, Tubil, Arki" class="w-full bg-white border border-slate-300 text-slate-800 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-prashasan-base focus:border-prashasan-base outline-none transition-shadow">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">
+                        Office / School Name &amp; Address
+                        <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="emp_office"
+                        autocomplete="organization"
+                        placeholder="e.g., Utkramit +2 High School, Tubil, Arki"
+                        class="w-full bg-white border border-slate-300 text-slate-800 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-prashasan-base focus:border-prashasan-base outline-none transition-shadow"
+                    >
                 </div>
+
                 <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">Mobile Number <span class="text-red-500">*</span></label>
-                    <input type="tel" id="emp_mobile" placeholder="10-digit mobile number" maxlength="10" class="w-full bg-white border border-slate-300 text-slate-800 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-prashasan-base focus:border-prashasan-base outline-none transition-shadow">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">
+                        Mobile Number
+                        <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="tel"
+                        id="emp_mobile"
+                        inputmode="numeric"
+                        autocomplete="tel"
+                        maxlength="10"
+                        pattern="[6-9][0-9]{9}"
+                        placeholder="10-digit mobile number"
+                        class="w-full bg-white border border-slate-300 text-slate-800 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-prashasan-base focus:border-prashasan-base outline-none transition-shadow"
+                    >
                 </div>
+
                 <div>
-                    <label class="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">Email ID <span class="text-red-500">*</span></label>
-                    <input type="email" id="emp_email" placeholder="employee@example.com" class="w-full bg-white border border-slate-300 text-slate-800 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-prashasan-base focus:border-prashasan-base outline-none transition-shadow">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1 uppercase tracking-wide">
+                        Email ID
+                        <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="email"
+                        id="emp_email"
+                        autocomplete="email"
+                        placeholder="employee@example.com"
+                        class="w-full bg-white border border-slate-300 text-slate-800 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-prashasan-base focus:border-prashasan-base outline-none transition-shadow"
+                    >
+                </div>
+
+                <div class="md:col-span-2">
+                    <label class="flex items-start gap-3 text-sm text-slate-600 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            id="email_contact_consent"
+                            class="mt-1 h-4 w-4 rounded border-slate-300 text-prashasan-base focus:ring-prashasan-base"
+                        >
+                        <span>
+                            I agree to receive service emails about this Form 16 application,
+                            including an incomplete-application reminder. Payment confirmation
+                            and Form 16 delivery emails are part of the requested service.
+                        </span>
+                    </label>
+
+                    <p id="autosave_status" class="text-xs text-slate-500 mt-2" aria-live="polite">
+                        Progress is saved automatically when valid details are entered.
+                    </p>
                 </div>
             </div>
         </div>
 
         <!-- Matrix Correction Side-by-Side UI -->
-        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">Latest Month Check (Anomaly Detected)</h3>
-        
+        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">
+            Latest Month Check
+        </h3>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <!-- Left: Extracted Data -->
             <div class="border border-slate-300 rounded-lg overflow-hidden">
                 <div class="bg-slate-500 text-white px-4 py-2 font-medium text-sm flex justify-between items-center">
                     <span>Original Data (OCR Extracted)</span>
-                    <span class="bg-slate-600 px-2 py-0.5 rounded text-xs" id="bill_type">Combined Bill</span>
+                    <span class="bg-slate-600 px-2 py-0.5 rounded text-xs" id="bill_type">
+                        Loading...
+                    </span>
                 </div>
+
                 <div class="p-4 bg-slate-50">
-                    <p class="text-slate-500 text-sm mb-1" id="orig_period">Basic Pay (Jun-Oct)</p>
+                    <p class="text-slate-500 text-sm mb-1" id="orig_period">Basic Pay</p>
                     <p class="text-3xl font-bold font-mono text-slate-800" id="orig_basic">₹ 0.00</p>
+
                     <ul class="mt-4 space-y-2 text-sm text-slate-600 font-mono">
-                        <li class="flex justify-between"><span>DA</span> <span id="orig_da">₹ 0.00</span></li>
-                        <li class="flex justify-between"><span>HRA</span> <span id="orig_hra">₹ 0.00</span></li>
+                        <li class="flex justify-between">
+                            <span>DA</span>
+                            <span id="orig_da">₹ 0.00</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span>HRA</span>
+                            <span id="orig_hra">₹ 0.00</span>
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -83,17 +179,30 @@
             <!-- Right: Corrected Data -->
             <div class="border border-prashasan-base rounded-lg overflow-hidden shadow-sm">
                 <div class="bg-prashasan-base text-white px-4 py-2 font-medium text-sm flex justify-between items-center">
-                    <span>Corrected Data (7th CPC Matrix)</span>
-                    <span class="bg-prashasan-dark px-2 py-0.5 rounded text-xs">Level Check</span>
+                    <span>7th CPC Matrix Check</span>
+                    <span class="bg-prashasan-dark px-2 py-0.5 rounded text-xs" id="matrix_status">
+                        Level Check
+                    </span>
                 </div>
+
                 <div class="p-4 bg-prashasan-light">
-                    <p class="text-prashasan-dark text-sm mb-1">Normalized Basic Pay (Per Month)</p>
-                    <p class="text-3xl font-bold font-mono text-prashasan-dark" id="corr_basic">₹ 0.00</p>
+                    <p class="text-prashasan-dark text-sm mb-1">
+                        Normalized Basic Pay (Per Month)
+                    </p>
+                    <p class="text-3xl font-bold font-mono text-prashasan-dark" id="corr_basic">
+                        ₹ 0.00
+                    </p>
+
                     <ul class="mt-4 space-y-2 text-sm text-prashasan-dark font-mono">
-                        <li class="flex justify-between"><span>DA (Projected)</span> <span id="corr_da">₹ 0.00</span></li>
+                        <li class="flex justify-between">
+                            <span>DA (Normalized)</span>
+                            <span id="corr_da">₹ 0.00</span>
+                        </li>
                         <li class="flex justify-between items-center">
-                            <span>HRA</span> 
-                            <span class="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded border border-amber-200 font-sans">Manual Check</span>
+                            <span>HRA</span>
+                            <span class="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded border border-amber-200 font-sans">
+                                Review from ledger
+                            </span>
                         </li>
                     </ul>
                 </div>
@@ -102,9 +211,11 @@
 
         <!-- Dynamic Ledger Table -->
         <div class="mt-8 flex justify-between items-end mb-4">
-            <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">Extracted Ledger Data</h3>
+            <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+                Extracted Ledger Data
+            </h3>
         </div>
-        
+
         <div class="overflow-x-auto border border-slate-200 rounded-lg">
             <table class="w-full text-left border-collapse">
                 <thead>
@@ -118,141 +229,446 @@
                     </tr>
                 </thead>
                 <tbody class="font-mono text-sm text-slate-700" id="ledger_tbody">
-                    <!-- Rows will be injected here via JavaScript -->
+                    <!-- Rows injected safely via JavaScript -->
                 </tbody>
             </table>
         </div>
 
-        <div class="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center">
-            <button onclick="window.location.href='/'" class="text-slate-500 font-medium hover:text-slate-800 transition-colors">
+        <div class="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center gap-4">
+            <button
+                type="button"
+                onclick="window.location.href='/'"
+                class="text-slate-500 font-medium hover:text-slate-800 transition-colors"
+            >
                 &larr; Back to Upload
             </button>
-            <!-- Agar <a> tag hai toh aisa likho: -->
-            <button onclick="proceedToNextStep()" class="btn">
-                Confirm & Enter DDO Details
+
+            <button
+                type="button"
+                id="continue_button"
+                onclick="proceedToNextStep()"
+                class="btn"
+            >
+                Confirm &amp; Enter DDO Details
             </button>
         </div>
     </div>
 </div>
 
 <script>
-    const fmt = (num) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(num || 0);
+    const userId = {{ user_id | tojson }};
+    const fmt = (num) => new Intl.NumberFormat(
+        'en-IN',
+        {
+            style: 'currency',
+            currency: 'INR'
+        }
+    ).format(Number(num) || 0);
 
-    document.addEventListener("DOMContentLoaded", () => {
-        // Handle Stepper UI
-        const steps = document.querySelectorAll('.rounded-full');
-        steps[0].classList.replace('bg-prashasan-base', 'bg-emerald-500');
-        steps[0].innerHTML = '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
-        steps[1].classList.replace('bg-slate-200', 'bg-prashasan-base');
-        steps[1].classList.replace('text-slate-500', 'text-white');
-        steps[1].nextElementSibling.classList.replace('text-slate-500', 'text-prashasan-base');
+    let extractedSlips = [];
+    let autosaveTimer = null;
+    let autosaveInFlight = false;
 
-        // Load data from SessionStorage
-        const rawData = sessionStorage.getItem('extractedSlips');
-        if (!rawData) {
-            document.getElementById('ledger_tbody').innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-500">No data found. Please upload a file again.</td></tr>';
+    function getElement(id) {
+        return document.getElementById(id);
+    }
+
+    function getManualDetails() {
+        return {
+            office: getElement('emp_office').value.trim(),
+            mobile: getElement('emp_mobile').value.replace(/\D/g, '').slice(0, 10),
+            email: getElement('emp_email').value.trim().toLowerCase(),
+            emailContactConsent: getElement('email_contact_consent').checked
+        };
+    }
+
+    function validMobile(mobile) {
+        return /^[6-9]\d{9}$/.test(mobile);
+    }
+
+    function validEmail(email) {
+        if (!email) {
+            return false;
+        }
+
+        const input = getElement('emp_email');
+        input.value = email;
+        return input.checkValidity();
+    }
+
+    function setAutosaveStatus(message, isError = false) {
+        const status = getElement('autosave_status');
+        status.textContent = message;
+        status.classList.toggle('text-red-600', isError);
+        status.classList.toggle('text-slate-500', !isError);
+    }
+
+    function restoreManualDetails() {
+        const raw = sessionStorage.getItem('manualPersonalDetails');
+
+        if (!raw) {
             return;
         }
 
-        const slips = JSON.parse(rawData);
-        if (slips.length === 0) return;
+        try {
+            const saved = JSON.parse(raw);
 
-        // --- NEW: Populate Personal Details ---
-        const mainSlip = slips[0];
-        
-        document.getElementById('emp_name').value = mainSlip.employee_name || "N/A";
-        document.getElementById('emp_pan_input').value = mainSlip.pan_no || "N/A";
-        document.getElementById('emp_gpf').value = mainSlip.gpf_no || "N/A";
-        document.getElementById('emp_desig').value = mainSlip.designation || "N/A";
-        
-        // Header PAN
-        document.getElementById('emp_pan_header').innerText = mainSlip.pan_no || "N/A";
+            if (saved.office) {
+                getElement('emp_office').value = saved.office;
+            }
 
-        // --- Populate Matrix Validation Data ---
-        document.getElementById('orig_period').innerText = `Basic Pay (${mainSlip.period.raw})`;
-        const isCombined = mainSlip.period.is_combined;
-        document.getElementById('bill_type').innerText = isCombined ? "Combined Bill" : "Single Month";
+            if (saved.mobile) {
+                getElement('emp_mobile').value = String(saved.mobile)
+                    .replace(/\D/g, '')
+                    .slice(0, 10);
+            }
 
-        const origBasic = mainSlip.line_items.basic_pay || 0;
-        const origDa = mainSlip.line_items.da || 0;
-        const origHra = mainSlip.line_items.hra || 0;
+            if (saved.email) {
+                getElement('emp_email').value = String(saved.email).trim();
+            }
 
-        document.getElementById('orig_basic').innerText = fmt(origBasic);
-        document.getElementById('orig_da').innerText = fmt(origDa);
-        document.getElementById('orig_hra').innerText = fmt(origHra);
+            if (saved.emailContactConsent === true) {
+                getElement('email_contact_consent').checked = true;
+            }
+        } catch (error) {
+            console.warn('Could not restore manual details:', error);
+        }
+    }
 
-        const monthCount = isCombined && mainSlip.period.months ? mainSlip.period.months.length : 1;
-        document.getElementById('corr_basic').innerText = fmt(origBasic / monthCount);
-        document.getElementById('corr_da').innerText = fmt(origDa / monthCount);
+    function saveManualDetailsLocally() {
+        const details = getManualDetails();
 
-        // --- Populate Dynamic Ledger Table ---
-        const tbody = document.getElementById('ledger_tbody');
-        tbody.innerHTML = ''; 
+        sessionStorage.setItem(
+            'manualPersonalDetails',
+            JSON.stringify(details)
+        );
+    }
 
-        slips.forEach(slip => {
+    function getSnapshot() {
+        return {
+            name: getElement('emp_name').value.trim(),
+            pan: getElement('emp_pan_input').value.trim(),
+            office_school_name: getElement('emp_office').value.trim()
+        };
+    }
+
+    async function saveProgress({ finalStep = false, keepalive = false } = {}) {
+        if (!userId || autosaveInFlight) {
+            return;
+        }
+
+        const details = getManualDetails();
+
+        const payload = {
+            user_id: userId,
+            page_name: 'review',
+            step_name: finalStep ? 'contact_saved' : 'personal_details',
+            last_completed_step: finalStep ? 'review' : null,
+            progress_percent: finalStep ? 45 : 40,
+            email: validEmail(details.email) ? details.email : null,
+            mobile: validMobile(details.mobile) ? details.mobile : null,
+            email_contact_consent: Boolean(
+                details.emailContactConsent && validEmail(details.email)
+            ),
+            snapshot: getSnapshot()
+        };
+
+        autosaveInFlight = true;
+
+        try {
+            const response = await fetch('/api/progress', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload),
+                keepalive
+            });
+
+            if (!response.ok) {
+                let message = 'Progress could not be saved.';
+
+                try {
+                    const result = await response.json();
+                    message = result.detail || message;
+                } catch (_) {
+                    // Keep fallback message.
+                }
+
+                throw new Error(message);
+            }
+
+            setAutosaveStatus('Progress saved.');
+        } catch (error) {
+            console.warn('Progress autosave failed:', error);
+            setAutosaveStatus(
+                'Progress is saved locally; server autosave will retry when you edit again.',
+                true
+            );
+        } finally {
+            autosaveInFlight = false;
+        }
+    }
+
+    function scheduleAutosave() {
+        saveManualDetailsLocally();
+        setAutosaveStatus('Saving progress...');
+
+        if (autosaveTimer) {
+            clearTimeout(autosaveTimer);
+        }
+
+        autosaveTimer = setTimeout(() => {
+            saveProgress();
+        }, 700);
+    }
+
+    function createCell(text, className = '') {
+        const td = document.createElement('td');
+        td.className = className;
+        td.textContent = text;
+        return td;
+    }
+
+    function renderLedger(slips) {
+        const tbody = getElement('ledger_tbody');
+        tbody.innerHTML = '';
+
+        slips.forEach((slip) => {
+            const lineItems = slip && slip.line_items ? slip.line_items : {};
+            const period = slip && slip.period ? slip.period : {};
+            const warnings = Array.isArray(slip && slip.warnings)
+                ? slip.warnings
+                : [];
+
             const tr = document.createElement('tr');
-            tr.className = "border-b border-slate-100 hover:bg-slate-50";
-            
-            const statusBadge = slip.warnings && slip.warnings.length > 0 
-                ? '<span class="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full font-sans cursor-help" title="Warning Detected">⚠️ Review Needed</span>'
-                : '<span class="bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full font-sans">✓ Extracted</span>';
+            tr.className = 'border-b border-slate-100 hover:bg-slate-50';
 
-            tr.innerHTML = `
-                <td class="p-3 font-sans font-medium text-slate-800">${slip.period.raw || 'Unknown'}</td>
-                <td class="p-3 text-right">${fmt(slip.line_items.basic_pay)}</td>
-                <td class="p-3 text-right">${fmt(slip.line_items.da)}</td>
-                <td class="p-3 text-right font-semibold">${fmt(slip.gross_salary)}</td>
-                <td class="p-3 text-right">${fmt(slip.net_pay)}</td>
-                <td class="p-3">${statusBadge}</td>
-            `;
+            tr.appendChild(
+                createCell(
+                    period.raw || 'Unknown',
+                    'p-3 font-sans font-medium text-slate-800'
+                )
+            );
+            tr.appendChild(
+                createCell(
+                    fmt(lineItems.basic_pay),
+                    'p-3 text-right'
+                )
+            );
+            tr.appendChild(
+                createCell(
+                    fmt(lineItems.da),
+                    'p-3 text-right'
+                )
+            );
+            tr.appendChild(
+                createCell(
+                    fmt(slip && slip.gross_salary),
+                    'p-3 text-right font-semibold'
+                )
+            );
+            tr.appendChild(
+                createCell(
+                    fmt(slip && slip.net_pay),
+                    'p-3 text-right'
+                )
+            );
+
+            const statusCell = document.createElement('td');
+            statusCell.className = 'p-3';
+
+            const badge = document.createElement('span');
+
+            if (warnings.length > 0) {
+                badge.className = 'bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full font-sans cursor-help';
+                badge.textContent = '⚠ Review Needed';
+                badge.title = warnings.join(' | ');
+            } else {
+                badge.className = 'bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full font-sans';
+                badge.textContent = '✓ Extracted';
+            }
+
+            statusCell.appendChild(badge);
+            tr.appendChild(statusCell);
             tbody.appendChild(tr);
         });
+    }
+
+    function populateExtractedData(slips) {
+        if (!Array.isArray(slips) || slips.length === 0) {
+            return;
+        }
+
+        const mainSlip = slips[0] || {};
+        const period = mainSlip.period || {};
+        const lineItems = mainSlip.line_items || {};
+
+        getElement('emp_name').value = mainSlip.employee_name || 'N/A';
+        getElement('emp_pan_input').value = mainSlip.pan_no || 'N/A';
+        getElement('emp_gpf').value = mainSlip.gpf_no || 'N/A';
+        getElement('emp_desig').value = mainSlip.designation || 'N/A';
+        getElement('emp_pan_header').textContent = mainSlip.pan_no || 'N/A';
+
+        const periodLabel = period.raw || 'Unknown Period';
+        getElement('orig_period').textContent = `Basic Pay (${periodLabel})`;
+
+        const isCombined = Boolean(period.is_combined);
+        getElement('bill_type').textContent = isCombined
+            ? 'Combined Bill'
+            : 'Single Month';
+
+        const origBasic = Number(lineItems.basic_pay) || 0;
+        const origDa = Number(lineItems.da) || 0;
+        const origHra = Number(lineItems.hra) || 0;
+
+        getElement('orig_basic').textContent = fmt(origBasic);
+        getElement('orig_da').textContent = fmt(origDa);
+        getElement('orig_hra').textContent = fmt(origHra);
+
+        const months = Array.isArray(period.months) ? period.months : [];
+        const monthCount = isCombined && months.length > 0
+            ? months.length
+            : 1;
+
+        getElement('corr_basic').textContent = fmt(origBasic / monthCount);
+        getElement('corr_da').textContent = fmt(origDa / monthCount);
+
+        const hasWarnings = Array.isArray(mainSlip.warnings)
+            && mainSlip.warnings.length > 0;
+
+        getElement('matrix_status').textContent = hasWarnings
+            ? 'Review Needed'
+            : 'Checked';
+
+        renderLedger(slips);
+    }
+
+    function updateStepper() {
+        const steps = document.querySelectorAll('.rounded-full');
+
+        if (steps.length < 2) {
+            return;
+        }
+
+        steps[0].classList.replace('bg-prashasan-base', 'bg-emerald-500');
+        steps[0].innerHTML = '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+
+        steps[1].classList.replace('bg-slate-200', 'bg-prashasan-base');
+        steps[1].classList.replace('text-slate-500', 'text-white');
+
+        if (steps[1].nextElementSibling) {
+            steps[1].nextElementSibling.classList.replace(
+                'text-slate-500',
+                'text-prashasan-base'
+            );
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        updateStepper();
+        restoreManualDetails();
+
+        const rawData = sessionStorage.getItem('extractedSlips');
+
+        if (!rawData) {
+            getElement('ledger_tbody').innerHTML =
+                '<tr><td colspan="6" class="p-4 text-center text-red-500">No data found. Please upload a file again.</td></tr>';
+        } else {
+            try {
+                extractedSlips = JSON.parse(rawData);
+
+                if (!Array.isArray(extractedSlips) || extractedSlips.length === 0) {
+                    throw new Error('No salary slips found.');
+                }
+
+                populateExtractedData(extractedSlips);
+            } catch (error) {
+                console.error('Could not load extracted salary data:', error);
+                getElement('ledger_tbody').innerHTML =
+                    '<tr><td colspan="6" class="p-4 text-center text-red-500">Salary data could not be loaded. Please upload the file again.</td></tr>';
+            }
+        }
+
+        ['emp_office', 'emp_mobile', 'emp_email'].forEach((id) => {
+            getElement(id).addEventListener('input', scheduleAutosave);
+            getElement(id).addEventListener('blur', () => {
+                saveManualDetailsLocally();
+                saveProgress();
+            });
+        });
+
+        getElement('email_contact_consent').addEventListener('change', () => {
+            saveManualDetailsLocally();
+            saveProgress();
+        });
+
+        // Register this review step even before the user presses Continue.
+        saveProgress();
     });
 
-        // Validation, employee save & routing
+    window.addEventListener('pagehide', () => {
+        saveManualDetailsLocally();
+
+        if (autosaveTimer) {
+            clearTimeout(autosaveTimer);
+        }
+
+        saveProgress({ keepalive: true });
+    });
+
     async function proceedToNextStep() {
-        const office = document.getElementById('emp_office').value.trim();
-        const mobile = document.getElementById('emp_mobile').value.trim();
-        const email = document.getElementById('emp_email').value.trim();
-
-        const name = document.getElementById('emp_name').value.trim();
-        const pan = document.getElementById('emp_pan_input').value.trim();
-
-        const userId = "{{ user_id }}";
+        const office = getElement('emp_office').value.trim();
+        const mobile = getElement('emp_mobile').value.replace(/\D/g, '').slice(0, 10);
+        const email = getElement('emp_email').value.trim().toLowerCase();
+        const name = getElement('emp_name').value.trim();
+        const pan = getElement('emp_pan_input').value.trim().toUpperCase();
+        const consent = getElement('email_contact_consent').checked;
+        const continueButton = getElement('continue_button');
 
         if (!office || !mobile || !email) {
             alert(
-                "Please fill in the required fields: " +
-                "Office Address, Mobile Number, and Email ID."
+                'Please fill in the required fields: ' +
+                'Office / School Name & Address, Mobile Number, and Email ID.'
             );
             return;
         }
 
-        if (!name || name === "N/A" || !pan || pan === "N/A") {
+        if (!validMobile(mobile)) {
+            alert('Please enter a valid 10-digit Indian mobile number.');
+            getElement('emp_mobile').focus();
+            return;
+        }
+
+        if (!validEmail(email)) {
+            alert('Please enter a valid email address.');
+            getElement('emp_email').focus();
+            return;
+        }
+
+        if (!name || name === 'N/A' || !pan || pan === 'N/A') {
             alert(
-                "Employee Name or PAN could not be extracted. " +
-                "Please upload a valid salary slip."
+                'Employee Name or PAN could not be extracted. ' +
+                'Please upload a valid salary slip.'
             );
             return;
         }
 
         if (!userId) {
-            alert("User ID is missing. Please upload the salary slip again.");
+            alert('User ID is missing. Please upload the salary slip again.');
             return;
         }
 
-        const manualDetails = {
-            office,
-            mobile,
-            email
-        };
+        saveManualDetailsLocally();
 
-        sessionStorage.setItem(
-            'manualPersonalDetails',
-            JSON.stringify(manualDetails)
-        );
+        continueButton.disabled = true;
+        continueButton.textContent = 'Saving...';
 
         try {
+            // Save progress first so the journey remains visible in admin
+            // even if the next request or navigation fails.
+            await saveProgress({ finalStep: true });
+
             const response = await fetch('/api/employee', {
                 method: 'POST',
                 headers: {
@@ -260,35 +676,54 @@
                 },
                 body: JSON.stringify({
                     user_id: userId,
-                    name: name,
-                    pan: pan,
+                    name,
+                    pan,
                     office_school_name: office,
-                    tan_id: null
+                    tan_id: null,
+                    email,
+                    mobile,
+                    email_contact_consent: consent
                 })
             });
 
-            const result = await response.json();
+            let result = {};
+
+            try {
+                result = await response.json();
+            } catch (_) {
+                // Use fallback error below when response is not JSON.
+            }
 
             if (!response.ok) {
                 throw new Error(
                     result.detail ||
-                    "Employee details could not be saved."
+                    'Employee details could not be saved.'
                 );
             }
+
+            sessionStorage.setItem(
+                'manualPersonalDetails',
+                JSON.stringify({
+                    office,
+                    mobile,
+                    email,
+                    emailContactConsent: consent
+                })
+            );
 
             window.location.href =
                 `/ddo-details?user_id=${encodeURIComponent(userId)}`;
 
         } catch (error) {
-            console.error(
-                "Employee details save failed:",
-                error
-            );
+            console.error('Employee details save failed:', error);
 
             alert(
-                "Employee details could not be saved: " +
+                'Employee details could not be saved: ' +
                 error.message
             );
+
+            continueButton.disabled = false;
+            continueButton.textContent = 'Confirm & Enter DDO Details';
         }
     }
 </script>
