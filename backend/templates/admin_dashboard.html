@@ -1,363 +1,1023 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+<div class="max-w-7xl mx-auto space-y-6">
 
     <!-- Header -->
-    <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-        <div>
-            <h2 class="text-xl font-semibold text-slate-800">
-                Admin Control Panel
-            </h2>
-
-            <p class="text-sm text-slate-500 mt-1">
-                Manage Form 16 Requests, Payments & Financial Year
-            </p>
-        </div>
-
-        <div class="flex gap-4 items-center">
-            <span class="text-sm font-medium text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                System Online
-            </span>
-
-            <a
-                href="/admin/logout"
-                class="text-sm font-semibold text-red-500 hover:text-red-700 underline"
-            >
-                Logout
-            </a>
-        </div>
-    </div>
-
-
-    <!-- Financial Year Settings -->
-    <div class="p-6 border-b border-slate-200 bg-white">
-
-        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
-
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="p-6 bg-slate-50 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
-                <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">
-                    Form 16 Financial Year
-                </h3>
-
+                <h2 class="text-2xl font-bold text-slate-800">Admin Control Panel</h2>
                 <p class="text-sm text-slate-500 mt-1">
-                    Select the March to February payroll cycle used for Form 16 generation.
+                    Form 16 requests, payments, incomplete applications, generation records and service settings.
                 </p>
             </div>
 
-            <div class="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div class="flex flex-wrap items-center gap-3">
+                <span class="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200">
+                    Admin Authenticated
+                </span>
 
+                <span id="refresh_status" class="text-xs text-slate-500">
+                    Auto-refresh: 4s
+                </span>
+
+                <a
+                    href="/admin/logout"
+                    class="text-sm font-semibold text-red-600 hover:text-red-700 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50"
+                >
+                    Logout
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <p class="text-xs uppercase tracking-wide text-slate-500 font-semibold">Unique Visitors</p>
+            <p class="text-2xl font-bold text-slate-800 mt-1">{{ stats.unique_visitors or 0 }}</p>
+            <p class="text-xs text-slate-400 mt-1">Browser-based</p>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <p class="text-xs uppercase tracking-wide text-slate-500 font-semibold">Registered Users</p>
+            <p class="text-2xl font-bold text-slate-800 mt-1">{{ stats.total_users or 0 }}</p>
+            <p class="text-xs text-slate-400 mt-1">{{ stats.form_started or 0 }} journeys started</p>
+        </div>
+
+        <div class="bg-white border border-amber-200 rounded-xl p-4 shadow-sm">
+            <p class="text-xs uppercase tracking-wide text-amber-700 font-semibold">Incomplete</p>
+            <p class="text-2xl font-bold text-amber-700 mt-1">{{ stats.incomplete_users or 0 }}</p>
+            <p class="text-xs text-slate-400 mt-1">Not completed / approved</p>
+        </div>
+
+        <div class="bg-white border border-blue-200 rounded-xl p-4 shadow-sm">
+            <p class="text-xs uppercase tracking-wide text-blue-700 font-semibold">Pending Payments</p>
+            <p class="text-2xl font-bold text-blue-700 mt-1">{{ stats.pending_payments or 0 }}</p>
+            <p class="text-xs text-slate-400 mt-1">Awaiting verification</p>
+        </div>
+
+        <div class="bg-white border border-emerald-200 rounded-xl p-4 shadow-sm">
+            <p class="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Approved</p>
+            <p class="text-2xl font-bold text-emerald-700 mt-1">{{ stats.approved_payments or 0 }}</p>
+            <p class="text-xs text-slate-400 mt-1">{{ stats.rejected_payments or 0 }} rejected</p>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <p class="text-xs uppercase tracking-wide text-slate-500 font-semibold">Verified Revenue</p>
+            <p class="text-2xl font-bold text-slate-800 mt-1">
+                ₹{{ "%.2f"|format(stats.total_revenue or 0) }}
+            </p>
+            <p class="text-xs text-slate-400 mt-1">Approved payments only</p>
+        </div>
+    </div>
+
+    <!-- Funnel + delivery -->
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div class="xl:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-5">
                 <div>
-                    <label
-                        for="financial_year"
-                        class="block text-sm font-medium text-slate-700 mb-1"
-                    >
-                        Financial Year
-                    </label>
+                    <h3 class="font-semibold text-slate-800">Application Funnel</h3>
+                    <p class="text-xs text-slate-500 mt-1">
+                        Journey/session counts. Unique visitors are tracked separately.
+                    </p>
+                </div>
+            </div>
 
-                    <select
-                        id="financial_year"
-                        class="border border-slate-300 rounded-lg px-4 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-prashasan-base focus:border-prashasan-base min-w-[170px]"
-                    >
-                        <option value="">
-                            Select FY
-                        </option>
+            {% set started = stats.form_started or 0 %}
+            {% set payment_reached = stats.payment_page_reached or 0 %}
+            {% set approved = stats.approved_payments or 0 %}
 
-                        <option value="2024-25"
-                            {% if financial_year == "2024-25" %}selected{% endif %}>
-                            2024-25
-                        </option>
-
-                        <option value="2025-26"
-                            {% if financial_year == "2025-26" %}selected{% endif %}>
-                            2025-26
-                        </option>
-
-                        <option value="2026-27"
-                            {% if financial_year == "2026-27" %}selected{% endif %}>
-                            2026-27
-                        </option>
-
-                        <option value="2027-28"
-                            {% if financial_year == "2027-28" %}selected{% endif %}>
-                            2027-28
-                        </option>
-
-                        <option value="2028-29"
-                            {% if financial_year == "2028-29" %}selected{% endif %}>
-                            2028-29
-                        </option>
-
-                        <option value="2029-30"
-                            {% if financial_year == "2029-30" %}selected{% endif %}>
-                            2029-30
-                        </option>
-
-                        <option value="2030-31"
-                            {% if financial_year == "2030-31" %}selected{% endif %}>
-                            2030-31
-                        </option>
-                    </select>
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div class="rounded-lg bg-slate-50 border border-slate-200 p-4">
+                    <p class="text-xs text-slate-500 uppercase font-semibold">Visitors</p>
+                    <p class="text-xl font-bold text-slate-800 mt-1">{{ stats.unique_visitors or 0 }}</p>
                 </div>
 
-                <button
-                    type="button"
-                    onclick="saveFinancialYear()"
-                    id="save_fy_button"
-                    class="bg-teal-700 hover:bg-teal-800 text-white font-semibold px-5 py-2 rounded-lg transition-colors"
-                >
-                    Save Financial Year
+                <div class="rounded-lg bg-slate-50 border border-slate-200 p-4">
+                    <p class="text-xs text-slate-500 uppercase font-semibold">Form Started</p>
+                    <p class="text-xl font-bold text-slate-800 mt-1">{{ started }}</p>
+                </div>
+
+                <div class="rounded-lg bg-slate-50 border border-slate-200 p-4">
+                    <p class="text-xs text-slate-500 uppercase font-semibold">Payment Page</p>
+                    <p class="text-xl font-bold text-slate-800 mt-1">{{ payment_reached }}</p>
+                </div>
+
+                <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-4">
+                    <p class="text-xs text-emerald-700 uppercase font-semibold">Approved</p>
+                    <p class="text-xl font-bold text-emerald-700 mt-1">{{ approved }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+            <h3 class="font-semibold text-slate-800">PDF / Email Delivery</h3>
+            <p class="text-xs text-slate-500 mt-1 mb-4">Delivery audit summary</p>
+
+            <div class="space-y-3">
+                <div class="flex items-center justify-between rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+                    <span class="text-sm font-medium text-emerald-800">Emails Sent</span>
+                    <span class="text-lg font-bold text-emerald-700">{{ stats.email_sent or 0 }}</span>
+                </div>
+
+                <div class="flex items-center justify-between rounded-lg bg-red-50 border border-red-200 p-3">
+                    <span class="text-sm font-medium text-red-800">Email Failed</span>
+                    <span class="text-lg font-bold text-red-700">{{ stats.email_failed or 0 }}</span>
+                </div>
+
+                <div class="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 p-3">
+                    <span class="text-sm font-medium text-slate-700">Admin Generated</span>
+                    <span class="text-lg font-bold text-slate-800">{{ stats.admin_generated or 0 }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="p-6 border-b border-slate-200 bg-slate-50">
+            <h3 class="font-semibold text-slate-800">Service & Financial Settings</h3>
+            <p class="text-sm text-slate-500 mt-1">
+                Financial year controls Form 16 generation. Fee, UPI and Telegram settings are saved separately.
+            </p>
+        </div>
+
+        <div class="p-6 grid grid-cols-1 xl:grid-cols-2 gap-8">
+            <!-- FY -->
+            <div>
+                <h4 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">
+                    Financial Year
+                </h4>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <p class="text-xs uppercase tracking-wide text-slate-500 font-semibold">Active FY</p>
+                        <p id="active_fy" class="text-lg font-bold text-slate-800 mt-1">
+                            {{ financial_year or "Not Selected" }}
+                        </p>
+                    </div>
+
+                    <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <p class="text-xs uppercase tracking-wide text-slate-500 font-semibold">Assessment Year</p>
+                        <p id="active_ay" class="text-lg font-bold text-slate-800 mt-1">
+                            {{ assessment_year or "—" }}
+                        </p>
+                    </div>
+                </div>
+
+                <label for="financial_year" class="block text-sm font-medium text-slate-700 mb-1">
+                    Select Financial Year
+                </label>
+
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <select
+                        id="financial_year"
+                        class="flex-1 border border-slate-300 rounded-lg px-4 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-prashasan-base focus:border-prashasan-base"
+                    >
+                        <option value="">Select FY</option>
+                        {% for fy in ["2024-25", "2025-26", "2026-27", "2027-28", "2028-29", "2029-30", "2030-31", "2031-32", "2032-33"] %}
+                        <option value="{{ fy }}" {% if financial_year == fy %}selected{% endif %}>{{ fy }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <button
+                        type="button"
+                        id="save_fy_button"
+                        onclick="saveFinancialYear()"
+                        class="bg-teal-700 hover:bg-teal-800 text-white font-semibold px-5 py-2 rounded-lg transition-colors"
+                    >
+                        Save FY
+                    </button>
+                </div>
+
+                <div id="fy_message" class="hidden mt-3 text-sm font-medium"></div>
+            </div>
+
+            <!-- General settings -->
+            <div>
+                <h4 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">
+                    Payment & Notifications
+                </h4>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="fee_amount" class="block text-sm font-medium text-slate-700 mb-1">
+                            Processing Fee (₹)
+                        </label>
+                        <input
+                            id="fee_amount"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value="{{ fee_amount }}"
+                            class="admin-setting w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-prashasan-base"
+                        >
+                    </div>
+
+                    <div>
+                        <label for="upi_id" class="block text-sm font-medium text-slate-700 mb-1">
+                            UPI ID
+                        </label>
+                        <input
+                            id="upi_id"
+                            type="text"
+                            value="{{ upi_id }}"
+                            placeholder="merchant@upi"
+                            class="admin-setting w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-prashasan-base"
+                        >
+                    </div>
+
+                    <div>
+                        <label for="telegram_bot_token" class="block text-sm font-medium text-slate-700 mb-1">
+                            Telegram Bot Token
+                        </label>
+                        <input
+                            id="telegram_bot_token"
+                            type="password"
+                            value="{{ telegram_bot_token }}"
+                            autocomplete="off"
+                            class="admin-setting w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-prashasan-base"
+                        >
+                    </div>
+
+                    <div>
+                        <label for="telegram_chat_id" class="block text-sm font-medium text-slate-700 mb-1">
+                            Telegram Chat ID
+                        </label>
+                        <input
+                            id="telegram_chat_id"
+                            type="text"
+                            value="{{ telegram_chat_id }}"
+                            class="admin-setting w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-prashasan-base"
+                        >
+                    </div>
+                </div>
+
+                <div class="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                        type="button"
+                        id="save_settings_button"
+                        onclick="saveAdminSettings()"
+                        class="bg-prashasan-base hover:bg-prashasan-hover text-white font-semibold px-5 py-2 rounded-lg transition-colors"
+                    >
+                        Save Settings
+                    </button>
+
+                    <span id="settings_message" class="hidden text-sm font-medium"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment management -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="p-6 border-b border-slate-200 bg-slate-50 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+                <h3 class="font-semibold text-slate-800">Payment Management</h3>
+                <p class="text-sm text-slate-500 mt-1">
+                    Verify submitted UTRs. Approved payments are included in verified revenue.
+                </p>
+            </div>
+
+            <div class="flex flex-wrap gap-2" id="payment_filters">
+                <button type="button" data-filter="all" class="payment-filter px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-slate-800 text-white">
+                    All ({{ payments|length }})
+                </button>
+                <button type="button" data-filter="pending" class="payment-filter px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-600">
+                    Pending ({{ stats.pending_payments or 0 }})
+                </button>
+                <button type="button" data-filter="approved" class="payment-filter px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-600">
+                    Approved ({{ stats.approved_payments or 0 }})
+                </button>
+                <button type="button" data-filter="rejected" class="payment-filter px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-600">
+                    Rejected ({{ stats.rejected_payments or 0 }})
                 </button>
             </div>
         </div>
 
-
-        <!-- Current FY / AY -->
-        <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
-
-            <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <p class="text-xs uppercase tracking-wide text-slate-500 font-semibold">
-                    Active Financial Year
-                </p>
-
-                <p
-                    id="active_fy"
-                    class="text-lg font-bold text-slate-800 mt-1"
-                >
-                    {% if financial_year %}
-                        {{ financial_year }}
-                    {% else %}
-                        Not Selected
-                    {% endif %}
-                </p>
-            </div>
-
-            <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <p class="text-xs uppercase tracking-wide text-slate-500 font-semibold">
-                    Assessment Year
-                </p>
-
-                <p
-                    id="active_ay"
-                    class="text-lg font-bold text-slate-800 mt-1"
-                >
-                    {% if assessment_year %}
-                        {{ assessment_year }}
-                    {% else %}
-                        —
-                    {% endif %}
-                </p>
-            </div>
-
-        </div>
-
-        <div
-            id="fy_message"
-            class="hidden mt-4 text-sm font-medium"
-        ></div>
-
-    </div>
-
-
-    <!-- Payment Table -->
-    <div class="p-6">
-
-        <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">
-            Payment Verifications
-        </h3>
-
-        <div class="overflow-x-auto border border-slate-200 rounded-lg">
-
-            <table class="w-full text-left border-collapse">
-
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse min-w-[980px]">
                 <thead>
                     <tr class="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider">
-
-                        <th class="p-3 border-b border-slate-200">
-                            Employee Name
-                        </th>
-
-                        <th class="p-3 border-b border-slate-200">
-                            PAN
-                        </th>
-
-                        <th class="p-3 border-b border-slate-200">
-                            Amount
-                        </th>
-
-                        <th class="p-3 border-b border-slate-200">
-                            UTR Number
-                        </th>
-
-                        <th class="p-3 border-b border-slate-200">
-                            Action
-                        </th>
-
+                        <th class="p-3 border-b border-slate-200">Employee</th>
+                        <th class="p-3 border-b border-slate-200">Contact</th>
+                        <th class="p-3 border-b border-slate-200">Amount</th>
+                        <th class="p-3 border-b border-slate-200">UTR</th>
+                        <th class="p-3 border-b border-slate-200">Submitted</th>
+                        <th class="p-3 border-b border-slate-200">Status</th>
+                        <th class="p-3 border-b border-slate-200 text-right">Action</th>
                     </tr>
                 </thead>
 
-                <tbody class="divide-y divide-slate-100">
-
-                    {% for user in users %}
-
-                    <tr class="hover:bg-slate-50 transition-colors">
-
-                        <td class="p-4 text-sm font-medium text-slate-800">
-                            {{ user.name }}
+                <tbody class="divide-y divide-slate-100" id="payments_body">
+                    {% for payment in payments %}
+                    <tr class="payment-row hover:bg-slate-50 transition-colors" data-status="{{ payment.status }}">
+                        <td class="p-4">
+                            <p class="text-sm font-semibold text-slate-800">{{ payment.name }}</p>
+                            <p class="text-xs text-slate-500 font-mono mt-1">{{ payment.pan }}</p>
                         </td>
 
-                        <td class="p-4 text-sm text-slate-600 font-mono">
-                            {{ user.pan }}
+                        <td class="p-4">
+                            <p class="text-sm text-slate-700 break-all">{{ payment.email or "—" }}</p>
+                            <p class="text-xs text-slate-500 mt-1">{{ payment.mobile or "—" }}</p>
                         </td>
 
-                        <td class="p-4 text-sm text-slate-600">
-                            ₹{{ user.amount }}
+                        <td class="p-4 text-sm font-semibold text-slate-700">
+                            ₹{{ "%.2f"|format(payment.amount or 0) }}
                         </td>
 
-                        <td class="p-4 text-sm text-slate-600 font-mono tracking-wide">
-                            {{ user.utr_number }}
+                        <td class="p-4 text-sm text-slate-700 font-mono tracking-wide">
+                            {{ payment.utr_number }}
                         </td>
 
-                        <td class="p-4 text-sm">
+                        <td class="p-4 text-xs text-slate-500 whitespace-nowrap">
+                            {% if payment.created_at %}
+                                {{ payment.created_at.strftime("%d %b %Y, %I:%M %p") }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
 
-                            {% if user.status == 'approved' %}
-
+                        <td class="p-4">
+                            {% if payment.status == "approved" %}
                                 <span class="bg-emerald-100 text-emerald-700 text-xs px-3 py-1 rounded-full font-semibold border border-emerald-200">
                                     APPROVED
                                 </span>
-
+                            {% elif payment.status == "rejected" %}
+                                <span class="bg-red-100 text-red-700 text-xs px-3 py-1 rounded-full font-semibold border border-red-200">
+                                    REJECTED
+                                </span>
                             {% else %}
+                                <span class="bg-amber-100 text-amber-700 text-xs px-3 py-1 rounded-full font-semibold border border-amber-200">
+                                    PENDING
+                                </span>
+                            {% endif %}
+                        </td>
 
+                        <td class="p-4 text-right whitespace-nowrap">
+                            {% if payment.status == "pending" %}
                                 <form
-                                    action="/admin/payment/approve/{{ user.id }}"
+                                    action="/admin/payment/approve/{{ payment.payment_id }}"
                                     method="POST"
                                     class="inline"
+                                    onsubmit="return confirmPaymentAction(this, 'approve')"
                                 >
                                     <button
                                         type="submit"
-                                        class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-1.5 rounded-md font-medium transition-colors shadow-sm"
+                                        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-md font-semibold transition-colors"
                                     >
                                         Approve
                                     </button>
                                 </form>
 
+                                <form
+                                    action="/admin/payment/decline/{{ payment.payment_id }}"
+                                    method="POST"
+                                    class="inline ml-1"
+                                    onsubmit="return confirmPaymentAction(this, 'decline')"
+                                >
+                                    <button
+                                        type="submit"
+                                        class="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-md font-semibold transition-colors"
+                                    >
+                                        Decline
+                                    </button>
+                                </form>
+                            {% else %}
+                                <span class="text-xs text-slate-400">No action required</span>
                             {% endif %}
-
                         </td>
-
                     </tr>
-
                     {% else %}
-
                     <tr>
-                        <td
-                            colspan="5"
-                            class="p-8 text-center text-slate-500 text-sm"
-                        >
-                            No payments found.
+                        <td colspan="7" class="p-10 text-center text-slate-500 text-sm">
+                            No payment requests found.
                         </td>
                     </tr>
-
                     {% endfor %}
 
+                    <tr id="payment_filter_empty" class="hidden">
+                        <td colspan="7" class="p-10 text-center text-slate-500 text-sm">
+                            No payments in this status.
+                        </td>
+                    </tr>
                 </tbody>
-
             </table>
+        </div>
+    </div>
 
+    <!-- Incomplete users -->
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="p-6 border-b border-slate-200 bg-slate-50">
+            <h3 class="font-semibold text-slate-800">Incomplete / Abandoned Applications</h3>
+            <p class="text-sm text-slate-500 mt-1">
+                Users who have not completed an approved payment flow. Last stage is based on saved journey progress.
+            </p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse min-w-[1050px]">
+                <thead>
+                    <tr class="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider">
+                        <th class="p-3 border-b border-slate-200">Name / User</th>
+                        <th class="p-3 border-b border-slate-200">Email</th>
+                        <th class="p-3 border-b border-slate-200">Mobile</th>
+                        <th class="p-3 border-b border-slate-200">Last Stage</th>
+                        <th class="p-3 border-b border-slate-200">Progress</th>
+                        <th class="p-3 border-b border-slate-200">Payment</th>
+                        <th class="p-3 border-b border-slate-200">Reminder</th>
+                        <th class="p-3 border-b border-slate-200">Last Active</th>
+                    </tr>
+                </thead>
+
+                <tbody class="divide-y divide-slate-100">
+                    {% for item in incomplete_users[:100] %}
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-4">
+                            <p class="text-sm font-semibold text-slate-800">
+                                {{ item.name or "Unknown / not captured" }}
+                            </p>
+                            <p class="text-xs text-slate-400 font-mono mt-1">
+                                {{ item.user_id or item.session_id }}
+                            </p>
+                        </td>
+
+                        <td class="p-4 text-sm text-slate-700 break-all">
+                            {{ item.email or "—" }}
+                        </td>
+
+                        <td class="p-4 text-sm text-slate-700">
+                            {{ item.mobile or "—" }}
+                        </td>
+
+                        <td class="p-4">
+                            <p class="text-sm font-medium text-slate-700">
+                                {{ (item.current_page or "unknown")|replace("_", " ")|title }}
+                            </p>
+                            <p class="text-xs text-slate-400 mt-1">
+                                {{ (item.current_step or item.last_completed_step or "—")|replace("_", " ")|title }}
+                            </p>
+                        </td>
+
+                        <td class="p-4">
+                            <div class="w-28 bg-slate-200 rounded-full h-2 overflow-hidden">
+                                <div
+                                    class="bg-prashasan-base h-2 rounded-full"
+                                    style="width: {{ [item.progress_percent or 0, 100]|min }}%;"
+                                ></div>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1">{{ item.progress_percent or 0 }}%</p>
+                        </td>
+
+                        <td class="p-4">
+                            <span class="text-xs font-semibold px-2 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-700">
+                                {{ (item.payment_status or "not_started")|replace("_", " ")|upper }}
+                            </span>
+                        </td>
+
+                        <td class="p-4">
+                            <span class="text-xs font-medium text-slate-600">
+                                {{ (item.reminder_status or "not_eligible")|replace("_", " ")|title }}
+                            </span>
+                        </td>
+
+                        <td class="p-4 text-xs text-slate-500 whitespace-nowrap">
+                            {% if item.last_seen_at %}
+                                {{ item.last_seen_at.strftime("%d %b %Y, %I:%M %p") }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="p-10 text-center text-slate-500 text-sm">
+                            No incomplete applications found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if incomplete_users|length > 100 %}
+        <div class="px-6 py-3 bg-amber-50 border-t border-amber-200 text-xs text-amber-800">
+            Showing the 100 most recent incomplete applications out of {{ incomplete_users|length }}.
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Admin direct generation -->
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+            <h3 class="font-semibold text-slate-800">Admin Direct Form 16</h3>
+            <p class="text-sm text-slate-500 mt-1">
+                Generate without a payment record. The backend requires employee details, email, DDO TAN and the active FY.
+            </p>
+
+            <form
+                id="admin_generate_form"
+                method="POST"
+                target="_blank"
+                class="mt-5"
+                onsubmit="return prepareAdminGenerateForm()"
+            >
+                <label for="admin_employee" class="block text-sm font-medium text-slate-700 mb-1">
+                    Employee
+                </label>
+
+                <select
+                    id="admin_employee"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-prashasan-base"
+                >
+                    <option value="">Select employee</option>
+                    {% for employee in employees %}
+                    <option value="{{ employee.user_id }}">
+                        {{ employee.name }} — {{ employee.pan }}{% if employee.tan_id %} — TAN linked{% else %} — TAN missing{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+
+                <button
+                    type="submit"
+                    class="mt-4 w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold px-4 py-2.5 rounded-lg transition-colors"
+                >
+                    Generate & Send Form 16
+                </button>
+
+                <p class="text-xs text-slate-400 mt-3">
+                    A successful request opens the PDF in a new tab and queues the administrator-generated email.
+                </p>
+            </form>
+        </div>
+
+        <div class="xl:col-span-2 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div class="p-6 border-b border-slate-200 bg-slate-50">
+                <h3 class="font-semibold text-slate-800">Admin-Generated History</h3>
+                <p class="text-sm text-slate-500 mt-1">
+                    Separate from paid-user revenue and payment verification.
+                </p>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[760px]">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider">
+                            <th class="p-3 border-b border-slate-200">Employee</th>
+                            <th class="p-3 border-b border-slate-200">FY</th>
+                            <th class="p-3 border-b border-slate-200">Generation</th>
+                            <th class="p-3 border-b border-slate-200">Downloads</th>
+                            <th class="p-3 border-b border-slate-200">Created</th>
+                            <th class="p-3 border-b border-slate-200 text-right">PDF</th>
+                        </tr>
+                    </thead>
+
+                    <tbody class="divide-y divide-slate-100">
+                        {% for item in admin_generated[:50] %}
+                        <tr class="hover:bg-slate-50">
+                            <td class="p-4">
+                                <p class="text-sm font-semibold text-slate-800">{{ item.name }}</p>
+                                <p class="text-xs text-slate-500 font-mono mt-1">{{ item.pan }}</p>
+                                <p class="text-xs text-slate-400 break-all mt-1">{{ item.email or "No email" }}</p>
+                            </td>
+
+                            <td class="p-4 text-sm font-medium text-slate-700">
+                                {{ item.financial_year }}
+                            </td>
+
+                            <td class="p-4">
+                                {% if item.status == "generated" %}
+                                    <span class="text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-1">
+                                        GENERATED
+                                    </span>
+                                {% elif item.status == "failed" %}
+                                    <span class="text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-full px-2.5 py-1">
+                                        FAILED
+                                    </span>
+                                {% else %}
+                                    <span class="text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 rounded-full px-2.5 py-1">
+                                        {{ item.status|upper }}
+                                    </span>
+                                {% endif %}
+                            </td>
+
+                            <td class="p-4 text-sm text-slate-700">
+                                {{ item.download_count or 0 }}
+                            </td>
+
+                            <td class="p-4 text-xs text-slate-500 whitespace-nowrap">
+                                {% if item.created_at %}
+                                    {{ item.created_at.strftime("%d %b %Y, %I:%M %p") }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+
+                            <td class="p-4 text-right">
+                                <a
+                                    href="/api/download/form16-generation/{{ item.generation_id }}"
+                                    target="_blank"
+                                    class="text-xs font-semibold text-prashasan-base hover:underline"
+                                >
+                                    Download
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="p-10 text-center text-slate-500 text-sm">
+                                No administrator-generated Form 16 records yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
 </div>
 
-
 <script>
-async function saveFinancialYear() {
+    let settingsDirty = false;
+    let activePaymentFilter = "all";
+    let refreshTimer = null;
 
-    const select =
-        document.getElementById("financial_year");
+    function setMessage(elementId, message, type) {
+        const element = document.getElementById(elementId);
 
-    const button =
-        document.getElementById("save_fy_button");
+        const classes = {
+            success: "text-emerald-600",
+            error: "text-red-600",
+            info: "text-slate-600"
+        };
 
-    const message =
-        document.getElementById("fy_message");
-
-    const financialYear =
-        select.value.trim();
-
-    if (!financialYear) {
-        alert("Please select a Financial Year.");
-        return;
+        element.textContent = message;
+        element.className =
+            `mt-3 text-sm font-medium ${classes[type] || classes.info}`;
+        element.classList.remove("hidden");
     }
 
-    button.disabled = true;
-    button.textContent = "Saving...";
+    function setButtonBusy(button, busy, busyText, normalText) {
+        button.disabled = busy;
+        button.textContent = busy ? busyText : normalText;
+        button.classList.toggle("opacity-60", busy);
+        button.classList.toggle("cursor-not-allowed", busy);
+    }
 
-    message.classList.add("hidden");
+    async function saveFinancialYear() {
+        const select = document.getElementById("financial_year");
+        const button = document.getElementById("save_fy_button");
+        const financialYear = select.value.trim();
 
-    try {
-
-        const response = await fetch(
-            "/api/admin/financial-year",
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-                    financial_year: financialYear
-                })
-            }
-        );
-
-        const result =
-            await response.json();
-
-        if (!response.ok) {
-            throw new Error(
-                result.detail ||
-                "Financial Year could not be saved."
+        if (!financialYear) {
+            setMessage(
+                "fy_message",
+                "Please select a Financial Year.",
+                "error"
             );
+            return;
         }
 
-        document.getElementById(
-            "active_fy"
-        ).textContent =
-            result.financial_year;
+        setButtonBusy(button, true, "Saving...", "Save FY");
 
-        document.getElementById(
-            "active_ay"
-        ).textContent =
-            result.assessment_year;
+        try {
+            const response = await fetch(
+                "/api/admin/financial-year",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        financial_year: financialYear
+                    })
+                }
+            );
 
-        message.textContent =
-            "Financial Year saved successfully.";
+            const result = await response.json();
 
-        message.className =
-            "mt-4 text-sm font-medium text-emerald-600";
+            if (!response.ok) {
+                throw new Error(
+                    result.detail ||
+                    "Financial Year could not be saved."
+                );
+            }
 
-    } catch (error) {
+            document.getElementById("active_fy").textContent =
+                result.financial_year;
+            document.getElementById("active_ay").textContent =
+                result.assessment_year;
 
-        console.error(
-            "Financial Year save failed:",
-            error
+            setMessage(
+                "fy_message",
+                "Financial Year saved successfully.",
+                "success"
+            );
+
+        } catch (error) {
+            console.error("Financial Year save failed:", error);
+
+            setMessage(
+                "fy_message",
+                "Error: " + error.message,
+                "error"
+            );
+
+        } finally {
+            setButtonBusy(button, false, "Saving...", "Save FY");
+        }
+    }
+
+    async function saveAdminSettings() {
+        const button =
+            document.getElementById("save_settings_button");
+
+        const feeRaw =
+            document.getElementById("fee_amount").value.trim();
+
+        const feeAmount = Number(feeRaw);
+
+        if (!Number.isFinite(feeAmount) || feeAmount < 0) {
+            setMessage(
+                "settings_message",
+                "Please enter a valid processing fee.",
+                "error"
+            );
+            return;
+        }
+
+        setButtonBusy(
+            button,
+            true,
+            "Saving...",
+            "Save Settings"
         );
 
-        message.textContent =
-            "Error: " + error.message;
+        try {
+            const response = await fetch(
+                "/api/admin/settings",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        fee_amount: feeAmount,
+                        upi_id:
+                            document.getElementById("upi_id").value.trim(),
+                        telegram_bot_token:
+                            document.getElementById("telegram_bot_token").value.trim(),
+                        telegram_chat_id:
+                            document.getElementById("telegram_chat_id").value.trim()
+                    })
+                }
+            );
 
-        message.className =
-            "mt-4 text-sm font-medium text-red-600";
+            const result = await response.json();
 
-    } finally {
+            if (!response.ok) {
+                throw new Error(
+                    result.detail ||
+                    "Settings could not be saved."
+                );
+            }
 
-        button.disabled = false;
-        button.textContent =
-            "Save Financial Year";
+            settingsDirty = false;
+
+            setMessage(
+                "settings_message",
+                "Settings saved successfully.",
+                "success"
+            );
+
+        } catch (error) {
+            console.error("Admin settings save failed:", error);
+
+            setMessage(
+                "settings_message",
+                "Error: " + error.message,
+                "error"
+            );
+
+        } finally {
+            setButtonBusy(
+                button,
+                false,
+                "Saving...",
+                "Save Settings"
+            );
+        }
     }
-}
-</script>
 
+    function confirmPaymentAction(form, action) {
+        const verb = action === "approve" ? "approve" : "decline";
+
+        const confirmed = window.confirm(
+            `Are you sure you want to ${verb} this payment?`
+        );
+
+        if (!confirmed) {
+            return false;
+        }
+
+        const buttons = form.querySelectorAll("button");
+        buttons.forEach(button => {
+            button.disabled = true;
+            button.classList.add("opacity-60", "cursor-not-allowed");
+        });
+
+        return true;
+    }
+
+    function prepareAdminGenerateForm() {
+        const select =
+            document.getElementById("admin_employee");
+
+        const form =
+            document.getElementById("admin_generate_form");
+
+        const userId = select.value.trim();
+
+        if (!userId) {
+            alert("Please select an employee.");
+            return false;
+        }
+
+        if (!document.getElementById("active_fy").textContent.trim() ||
+            document.getElementById("active_fy").textContent.trim() === "Not Selected") {
+            alert("Please select and save the Financial Year first.");
+            return false;
+        }
+
+        const confirmed = window.confirm(
+            "Generate Form 16 directly for this employee without payment verification?"
+        );
+
+        if (!confirmed) {
+            return false;
+        }
+
+        form.action =
+            `/admin/form16/generate/${encodeURIComponent(userId)}`;
+
+        return true;
+    }
+
+    function applyPaymentFilter(filter) {
+        activePaymentFilter = filter;
+        sessionStorage.setItem(
+            "adminPaymentFilter",
+            filter
+        );
+
+        const rows =
+            document.querySelectorAll(".payment-row");
+
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const visible =
+                filter === "all" ||
+                row.dataset.status === filter;
+
+            row.classList.toggle("hidden", !visible);
+
+            if (visible) {
+                visibleCount += 1;
+            }
+        });
+
+        document.getElementById(
+            "payment_filter_empty"
+        ).classList.toggle(
+            "hidden",
+            visibleCount !== 0
+        );
+
+        document
+            .querySelectorAll(".payment-filter")
+            .forEach(button => {
+                const active =
+                    button.dataset.filter === filter;
+
+                button.classList.toggle(
+                    "bg-slate-800",
+                    active
+                );
+                button.classList.toggle(
+                    "text-white",
+                    active
+                );
+                button.classList.toggle(
+                    "bg-white",
+                    !active
+                );
+                button.classList.toggle(
+                    "text-slate-600",
+                    !active
+                );
+            });
+    }
+
+    function isDashboardBeingEdited() {
+        const active = document.activeElement;
+
+        if (
+            active &&
+            (
+                active.tagName === "INPUT" ||
+                active.tagName === "SELECT" ||
+                active.tagName === "TEXTAREA"
+            )
+        ) {
+            return true;
+        }
+
+        return settingsDirty;
+    }
+
+    function scheduleAutoRefresh() {
+        clearTimeout(refreshTimer);
+
+        refreshTimer = setTimeout(() => {
+            const status =
+                document.getElementById("refresh_status");
+
+            if (
+                document.hidden ||
+                isDashboardBeingEdited()
+            ) {
+                status.textContent =
+                    "Auto-refresh paused while editing";
+
+                scheduleAutoRefresh();
+                return;
+            }
+
+            status.textContent = "Refreshing...";
+            window.location.reload();
+
+        }, 4000);
+    }
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        () => {
+            document
+                .querySelectorAll(".admin-setting")
+                .forEach(element => {
+                    element.addEventListener(
+                        "input",
+                        () => {
+                            settingsDirty = true;
+                        }
+                    );
+                });
+
+            document
+                .querySelectorAll(".payment-filter")
+                .forEach(button => {
+                    button.addEventListener(
+                        "click",
+                        () => {
+                            applyPaymentFilter(
+                                button.dataset.filter
+                            );
+                        }
+                    );
+                });
+
+            const storedFilter =
+                sessionStorage.getItem(
+                    "adminPaymentFilter"
+                );
+
+            if (
+                ["all", "pending", "approved", "rejected"]
+                    .includes(storedFilter)
+            ) {
+                applyPaymentFilter(storedFilter);
+            } else {
+                applyPaymentFilter("all");
+            }
+
+            scheduleAutoRefresh();
+        }
+    );
+
+    document.addEventListener(
+        "visibilitychange",
+        () => {
+            if (!document.hidden) {
+                document.getElementById(
+                    "refresh_status"
+                ).textContent =
+                    "Auto-refresh: 4s";
+            }
+        }
+    );
+</script>
 {% endblock %}
